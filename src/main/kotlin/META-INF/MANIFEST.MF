@@ -1,0 +1,10 @@
+Manifest-Version: 1.0
+Class-Path: kotlin-reflect-1.5.31.jar kotlin-test-junit5-1.5.31.jar juni
+ t-jupiter-engine-5.7.0.jar jsr305-3.0.2.jar junit-jupiter-5.7.0.jar kot
+ lin-stdlib-common-1.5.31.jar kotlin-stdlib-1.5.31.jar kotlin-stdlib-jdk
+ 8-1.5.31.jar junit-platform-commons-1.7.0.jar kotlin-test-1.5.31.jar ap
+ iguardian-api-1.1.0.jar junit-jupiter-params-5.7.0.jar javassist-3.28.0
+ -GA.jar junit-platform-engine-1.7.0.jar junit-jupiter-api-5.7.0.jar ann
+ otations-13.0.jar slf4j-api-1.7.32.jar kotlin-stdlib-jdk7-1.5.31.jar re
+ flections-0.10.2.jar opentest4j-1.2.0.jar
+

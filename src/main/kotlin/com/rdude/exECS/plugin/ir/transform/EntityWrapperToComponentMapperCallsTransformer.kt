@@ -1,10 +1,9 @@
 package com.rdude.exECS.plugin.ir.transform
 
-import com.rdude.exECS.plugin.debugMessage
 import com.rdude.exECS.plugin.ir.lowering.ComponentMapperPropertyAdder
-import com.rdude.exECS.plugin.ir.utils.reference.ComponentMapper
 import com.rdude.exECS.plugin.ir.utils.MetaData
 import com.rdude.exECS.plugin.ir.utils.Representation
+import com.rdude.exECS.plugin.ir.utils.reference.ComponentMapper
 import com.rdude.exECS.plugin.ir.utils.reference.EntityWrapper
 import com.rdude.exECS.plugin.ir.visit.CallsFinder
 import org.jetbrains.kotlin.backend.common.IrElementTransformerVoidWithContext
@@ -16,7 +15,6 @@ import org.jetbrains.kotlin.ir.declarations.IrFunction
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrClassReference
 import org.jetbrains.kotlin.ir.expressions.IrExpression
-import org.jetbrains.kotlin.ir.util.dump
 
 class EntityWrapperToComponentMapperCallsTransformer : IrElementTransformerVoidWithContext() {
 
@@ -37,6 +35,7 @@ class EntityWrapperToComponentMapperCallsTransformer : IrElementTransformerVoidW
     }
 
     override fun visitCall(expression: IrCall): IrExpression {
+        val expression = super.visitCall(expression) as IrCall
         if (expression != currentTransformingCall) return expression
 
         return when (currentTransformingCallRepresentation) {
@@ -58,7 +57,7 @@ class EntityWrapperToComponentMapperCallsTransformer : IrElementTransformerVoidW
         getComponentMapperCall.dispatchReceiver = builder.irGet(currentTransformingFunction.dispatchReceiverParameter!!)
 
         val getEntityIdCall = builder.irCall(EntityWrapper.getEntityIdProperty.owner.getter!!)
-        getEntityIdCall.dispatchReceiver = expression.dispatchReceiver!!
+        getEntityIdCall.dispatchReceiver = expression.extensionReceiver!!
 
         val resultCall = builder.irCall(ComponentMapper.getComponentFun)
         resultCall.dispatchReceiver = getComponentMapperCall
@@ -80,7 +79,7 @@ class EntityWrapperToComponentMapperCallsTransformer : IrElementTransformerVoidW
         getComponentMapperCall.dispatchReceiver = builder.irGet(currentTransformingFunction.dispatchReceiverParameter!!)
 
         val getEntityIdCall = builder.irCall(EntityWrapper.getEntityIdProperty.owner.getter!!)
-        getEntityIdCall.dispatchReceiver = expression.dispatchReceiver!!
+        getEntityIdCall.dispatchReceiver = expression.extensionReceiver!!
 
         val resultCall = builder.irCall(ComponentMapper.hasComponentFun)
         resultCall.dispatchReceiver = getComponentMapperCall
@@ -102,7 +101,7 @@ class EntityWrapperToComponentMapperCallsTransformer : IrElementTransformerVoidW
         getComponentMapperCall.dispatchReceiver = builder.irGet(currentTransformingFunction.dispatchReceiverParameter!!)
 
         val getEntityIdCall = builder.irCall(EntityWrapper.getEntityIdProperty.owner.getter!!)
-        getEntityIdCall.dispatchReceiver = expression.dispatchReceiver!!
+        getEntityIdCall.dispatchReceiver = expression.extensionReceiver!!
 
         val resultCall = builder.irCall(ComponentMapper.removeComponentFun)
         resultCall.dispatchReceiver = getComponentMapperCall
@@ -123,7 +122,7 @@ class EntityWrapperToComponentMapperCallsTransformer : IrElementTransformerVoidW
         getComponentMapperCall.dispatchReceiver = builder.irGet(currentTransformingFunction.dispatchReceiverParameter!!)
 
         val getEntityIdCall = builder.irCall(EntityWrapper.getEntityIdProperty.owner.getter!!)
-        getEntityIdCall.dispatchReceiver = expression.dispatchReceiver!!
+        getEntityIdCall.dispatchReceiver = expression.extensionReceiver!!
 
         val resultCall = builder.irCall(ComponentMapper.addComponentFun)
         resultCall.dispatchReceiver = getComponentMapperCall

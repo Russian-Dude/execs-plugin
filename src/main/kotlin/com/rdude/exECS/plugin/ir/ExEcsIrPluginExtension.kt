@@ -1,5 +1,6 @@
 package com.rdude.exECS.plugin.ir
 
+import com.rdude.exECS.plugin.debugMessage
 import com.rdude.exECS.plugin.ir.debug.DebugVisitor
 import com.rdude.exECS.plugin.ir.transform.EntityWrapperToComponentMapperCallsTransformer
 import com.rdude.exECS.plugin.ir.utils.MetaData
@@ -10,6 +11,9 @@ import org.jetbrains.kotlin.backend.common.extensions.IrGenerationExtension
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
+import org.jetbrains.kotlin.ir.util.dump
+import org.jetbrains.kotlin.ir.util.kotlinFqName
+import org.jetbrains.kotlin.name.FqName
 
 class ExEcsIrPluginExtension() : IrGenerationExtension {
 
@@ -51,6 +55,6 @@ class ExEcsIrPluginExtension() : IrGenerationExtension {
 
 
         // debug
-        moduleFragment.accept(DebugVisitor(), null)
+        //moduleFragment.accept(DebugVisitor(), null)
     }
 }

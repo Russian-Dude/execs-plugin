@@ -1,8 +1,6 @@
 package com.rdude.exECS.plugin.ir.visit
 
-import com.rdude.exECS.plugin.ir.utils.Representation
-import com.rdude.exECS.plugin.ir.utils.merge
-import com.rdude.exECS.plugin.ir.utils.represents
+import com.rdude.exECS.plugin.ir.utils.*
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrFunction
@@ -20,14 +18,15 @@ class CallsFinder {
         moduleFragment: IrModuleFragment,
         representations: Collection<Representation<IrCall>>,
         inClasses: Collection<IrClass> = mutableSetOf<IrClass>().apply { moduleFragment.accept(classesVisitor, this) }
-    ): MutableSet<CallData> {
+    ): MutableList<CallData> {
         callsVisitor.lookingForRepresentations = representations
-        val result = mutableSetOf<CallData>()
+        val result = mutableListOf<CallData>()
         for (cl in inClasses) {
-            val functions: MutableSet<IrFunction> = HashSet()
+            callsVisitor.currentClass = cl
+            val functions = mutableListOf<IrFunction>()
             cl.accept(functionsVisitor, functions)
             for (function in functions) {
-                val calls = mutableMapOf<Representation<IrCall>, MutableSet<IrCall>>()
+                val calls = mutableMapOf<Representation<IrCall>, MutableList<IrCall>>()
                 function.accept(callsVisitor, calls)
                 for ((representation, set) in calls) {
                     set.forEach { call ->
@@ -40,34 +39,46 @@ class CallsFinder {
     }
 
 
-    class CallData(val call: IrCall, val insideClass: IrClass, val insideFunction: IrFunction, val representationOf: Representation<IrCall>)
+    class CallData(
+        val call: IrCall,
+        val insideClass: IrClass,
+        val insideFunction: IrFunction,
+        val representationOf: Representation<IrCall>
+    )
 
 
-    private inner class CallsVisitor : IrElementVisitor<Unit, MutableMap<Representation<IrCall>, MutableSet<IrCall>>> {
+    private inner class CallsVisitor : IrElementVisitor<Unit, MutableMap<Representation<IrCall>, MutableList<IrCall>>> {
 
         lateinit var lookingForRepresentations: Collection<Representation<IrCall>>
+        lateinit var currentClass: IrClass
 
-        override fun visitElement(element: IrElement, data: MutableMap<Representation<IrCall>, MutableSet<IrCall>>) {
+        override fun visitElement(element: IrElement, data: MutableMap<Representation<IrCall>, MutableList<IrCall>>) {
             element.acceptChildren(this, data)
         }
 
-        override fun visitCall(expression: IrCall, data: MutableMap<Representation<IrCall>, MutableSet<IrCall>>) {
+        override fun visitCall(expression: IrCall, data: MutableMap<Representation<IrCall>, MutableList<IrCall>>) {
             super.visitCall(expression, data)
             lookingForRepresentations.forEach {
-                if (expression represents it) {
-                    data.merge(it, expression)
+                if (it is SimpleRepresentation<IrCall>) {
+                    if (expression represents it) {
+                        data.merge(it, expression)
+                    }
+                } else if (it is FakeOverrideFunctionRepresentation) {
+                    if (expression.represents(it, currentClass)) {
+                        data.merge(it, expression)
+                    }
                 }
             }
         }
     }
 
-    private inner class FunctionsVisitor : IrElementVisitor<Unit, MutableSet<IrFunction>> {
+    private inner class FunctionsVisitor : IrElementVisitor<Unit, MutableList<IrFunction>> {
 
-        override fun visitElement(element: IrElement, data: MutableSet<IrFunction>) {
+        override fun visitElement(element: IrElement, data: MutableList<IrFunction>) {
             element.acceptChildren(this, data)
         }
 
-        override fun visitFunction(declaration: IrFunction, data: MutableSet<IrFunction>) {
+        override fun visitFunction(declaration: IrFunction, data: MutableList<IrFunction>) {
             super.visitFunction(declaration, data)
             data += declaration
         }

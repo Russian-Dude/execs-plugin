@@ -6,6 +6,7 @@ import com.rdude.exECS.plugin.ir.utils.MetaData
 import com.rdude.exECS.plugin.ir.utils.createCompanionObject
 import com.rdude.exECS.plugin.ir.utils.createPropertyWithBackingField
 import com.rdude.exECS.plugin.ir.utils.reference.Event
+import com.rdude.exECS.plugin.ir.utils.reference.HasId
 import org.jetbrains.kotlin.backend.common.ir.copyTo
 import org.jetbrains.kotlin.backend.common.lower.DeclarationIrBuilder
 import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
@@ -24,17 +25,17 @@ class GeneratedIdCompanionAndAccessFunctionAdder(private val existingCompanions:
 
     private val functionTransformer = GetIdFakeToCompanionBasedFunctionTransformer()
 
-    fun addTo(irClasses: Collection<IrClass>) {
+    fun addTo(irClasses: Collection<IrClass>, type: HasId) {
         for (cl in irClasses) {
             val companion = existingCompanions.getOrPut(cl) { cl.createCompanionObject() }
-            val property = addIdPropertyTo(companion, cl)
-            addGetIdFunction(cl, companion, property)
+            val property = addIdPropertyTo(companion, cl, type)
+            addGetIdFunction(cl, companion, property, type)
         }
     }
 
-    private fun addIdPropertyTo(toCompanion: IrClass, inClass: IrClass): IrProperty {
+    private fun addIdPropertyTo(toCompanion: IrClass, inClass: IrClass, type: HasId): IrProperty {
         return toCompanion.createPropertyWithBackingField(
-            name = "execs_generated_id_property_for_${inClass.kotlinFqName.asString().replace(".", "_")}",
+            name = "execs_generated_${type.idPropertyNamePrefix.toLowerCase()}_id_property_for_${inClass.kotlinFqName.asString().replace(".", "_")}",
             type = MetaData.context.irBuiltIns.intType,
             isVar = true,
             isLateInit = false
@@ -42,9 +43,9 @@ class GeneratedIdCompanionAndAccessFunctionAdder(private val existingCompanions:
     }
 
 
-    private fun addGetIdFunction(irClass: IrClass, companion: IrClass, idProperty: IrProperty) {
+    private fun addGetIdFunction(irClass: IrClass, companion: IrClass, idProperty: IrProperty, type: HasId) {
         val function = IR_FACTORY.buildFun {
-            this.name = Name.identifier("getTypeId")
+            this.name = Name.identifier("get${type.idPropertyNamePrefix.toUpperCase()}TypeId")
             this.visibility = DescriptorVisibilities.PUBLIC
             this.modality = Modality.OPEN
             this.returnType = MetaData.context.irBuiltIns.intType
@@ -53,7 +54,7 @@ class GeneratedIdCompanionAndAccessFunctionAdder(private val existingCompanions:
         }
 
         function.dispatchReceiverParameter = irClass.thisReceiver!!.copyTo(function)
-        function.overriddenSymbols = listOf(Event.getTypeIdFun)
+        function.overriddenSymbols = listOf(type.getTypeIdFun)
 
         val builder = DeclarationIrBuilder(MetaData.context, function.symbol, function.startOffset, function.endOffset)
 
@@ -68,7 +69,7 @@ class GeneratedIdCompanionAndAccessFunctionAdder(private val existingCompanions:
             )
         }
 
-        functionTransformer.transformTo(function, irClass)
+        functionTransformer.transformTo(function, irClass, type)
         irClass.transform(functionTransformer, null)
     }
 

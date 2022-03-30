@@ -3,7 +3,9 @@ package com.rdude.exECS.plugin.ir
 import com.rdude.exECS.plugin.ir.lowering.GeneratedIdCompanionAndAccessFunctionAdder
 import com.rdude.exECS.plugin.ir.transform.EntityWrapperToComponentMapperCallsTransformer
 import com.rdude.exECS.plugin.ir.utils.MetaData
+import com.rdude.exECS.plugin.ir.utils.reference.Component
 import com.rdude.exECS.plugin.ir.utils.reference.EntityWrapper
+import com.rdude.exECS.plugin.ir.utils.reference.Event
 import com.rdude.exECS.plugin.ir.visit.CallsFinder
 import com.rdude.exECS.plugin.ir.visit.ClassesFinder
 import com.rdude.exECS.plugin.ir.visit.CompanionsFinder
@@ -56,10 +58,14 @@ class ExEcsIrPluginExtension() : IrGenerationExtension {
         }
 
 
-        // add companions that holds type ids to events
         val generatedIdAdder = GeneratedIdCompanionAndAccessFunctionAdder(existingCompanions)
+        // add companions that holds type ids to events
         if (classes[eventFqName]?.isNotEmpty() == true) {
-            generatedIdAdder.addTo(classes[eventFqName]!!)
+            generatedIdAdder.addTo(classes[eventFqName]!!, Event)
+        }
+        // add companions that holds type ids to components
+        if (classes[componentFqName]?.isNotEmpty() == true) {
+            generatedIdAdder.addTo(classes[eventFqName]!!, Component)
         }
 
 

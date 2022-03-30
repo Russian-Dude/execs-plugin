@@ -1,19 +1,16 @@
 package com.rdude.exECS.plugin.ir
 
-import com.rdude.exECS.plugin.debugMessage
-import com.rdude.exECS.plugin.ir.debug.DebugVisitor
+import com.rdude.exECS.plugin.ir.lowering.GeneratedIdCompanionAndAccessFunctionAdder
 import com.rdude.exECS.plugin.ir.transform.EntityWrapperToComponentMapperCallsTransformer
 import com.rdude.exECS.plugin.ir.utils.MetaData
 import com.rdude.exECS.plugin.ir.utils.reference.EntityWrapper
 import com.rdude.exECS.plugin.ir.visit.CallsFinder
 import com.rdude.exECS.plugin.ir.visit.ClassesFinder
+import com.rdude.exECS.plugin.ir.visit.CompanionsFinder
 import org.jetbrains.kotlin.backend.common.extensions.IrGenerationExtension
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
-import org.jetbrains.kotlin.ir.util.dump
-import org.jetbrains.kotlin.ir.util.kotlinFqName
-import org.jetbrains.kotlin.name.FqName
 
 class ExEcsIrPluginExtension() : IrGenerationExtension {
 
@@ -23,13 +20,18 @@ class ExEcsIrPluginExtension() : IrGenerationExtension {
 
         val componentFqName = "com.rdude.exECS.component.Component"
         val systemFqName = "com.rdude.exECS.system.System"
+        val eventFqName = "com.rdude.exECS.event.Event"
 
+        // classes plugin is interested in
         val classes: MutableMap<String, MutableList<IrClass>> = HashMap()
 
-        // find subtypes of System and Component
-        val classesFinder = ClassesFinder(listOf(componentFqName, systemFqName))
+        // find subtypes of System, Component and Event
+        val classesFinder = ClassesFinder(listOf(componentFqName, systemFqName, eventFqName))
         moduleFragment.accept(classesFinder, classes)
 
+        // find existing companion objects of classes that plugin is interested in
+        val companionsFinder = CompanionsFinder()
+        val existingCompanions = companionsFinder.find(classes.values.flatten())
 
         // find and transform calls to EntityWrapper methods inside system subclasses
         if (classes[systemFqName]?.isNotEmpty() == true) {
@@ -51,6 +53,13 @@ class ExEcsIrPluginExtension() : IrGenerationExtension {
             // transform
             val entityWrapperToComponentMapperCallsTransformer = EntityWrapperToComponentMapperCallsTransformer()
             entityWrapperMethodCallsData.forEach { entityWrapperToComponentMapperCallsTransformer.transform(it) }
+        }
+
+
+        // add companions that holds type ids to events
+        val generatedIdAdder = GeneratedIdCompanionAndAccessFunctionAdder(existingCompanions)
+        if (classes[eventFqName]?.isNotEmpty() == true) {
+            generatedIdAdder.addTo(classes[eventFqName]!!)
         }
 
 

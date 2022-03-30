@@ -1,8 +1,8 @@
 package com.rdude.exECS.plugin.ir.transform
 
-import com.rdude.exECS.plugin.ir.lowering.ComponentMapperPropertyAdder
 import com.rdude.exECS.plugin.ir.utils.MetaData
 import com.rdude.exECS.plugin.ir.utils.Representation
+import com.rdude.exECS.plugin.ir.utils.createPropertyWithBackingField
 import com.rdude.exECS.plugin.ir.utils.reference.ComponentMapper
 import com.rdude.exECS.plugin.ir.utils.reference.EntityWrapper
 import com.rdude.exECS.plugin.ir.visit.CallsFinder
@@ -12,13 +12,18 @@ import org.jetbrains.kotlin.ir.builders.irCall
 import org.jetbrains.kotlin.ir.builders.irGet
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrFunction
+import org.jetbrains.kotlin.ir.declarations.IrProperty
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrClassReference
 import org.jetbrains.kotlin.ir.expressions.IrExpression
+import org.jetbrains.kotlin.ir.types.IrType
+import org.jetbrains.kotlin.ir.types.classFqName
+import org.jetbrains.kotlin.ir.types.typeWith
+import org.jetbrains.kotlin.name.FqName
 
 class EntityWrapperToComponentMapperCallsTransformer : IrElementTransformerVoidWithContext() {
 
-    private val componentMapperPropertyAdder = ComponentMapperPropertyAdder()
+    private val addedProperties: MutableMap<IrClass, MutableMap<IrType, IrProperty>> = HashMap()
 
     private lateinit var currentTransformingCall: IrCall
     private lateinit var currentTransformingFunction: IrFunction
@@ -49,7 +54,7 @@ class EntityWrapperToComponentMapperCallsTransformer : IrElementTransformerVoidW
 
     private fun transformGetComponent(expression: IrCall): IrExpression {
         val type = expression.getTypeArgument(0)!!
-        val componentMapperProperty = componentMapperPropertyAdder.addIfAbsent(currentTransformingClass, type)
+        val componentMapperProperty = addPropertyIfNeeded(currentTransformingClass, type)
 
         val builder = DeclarationIrBuilder(MetaData.context, componentMapperProperty.symbol)
 
@@ -71,7 +76,7 @@ class EntityWrapperToComponentMapperCallsTransformer : IrElementTransformerVoidW
         val type =
             if (expression.typeArgumentsCount == 1) expression.getTypeArgument(0)!!
             else (expression.getValueArgument(0)!! as IrClassReference).classType
-        val componentMapperProperty = componentMapperPropertyAdder.addIfAbsent(currentTransformingClass, type)
+        val componentMapperProperty = addPropertyIfNeeded(currentTransformingClass, type)
 
         val builder = DeclarationIrBuilder(MetaData.context, componentMapperProperty.symbol)
 
@@ -93,7 +98,7 @@ class EntityWrapperToComponentMapperCallsTransformer : IrElementTransformerVoidW
         val type =
             if (expression.typeArgumentsCount == 1) expression.getTypeArgument(0)!!
             else (expression.getValueArgument(0)!! as IrClassReference).classType
-        val componentMapperProperty = componentMapperPropertyAdder.addIfAbsent(currentTransformingClass, type)
+        val componentMapperProperty = addPropertyIfNeeded(currentTransformingClass, type)
 
         val builder = DeclarationIrBuilder(MetaData.context, componentMapperProperty.symbol)
 
@@ -114,7 +119,7 @@ class EntityWrapperToComponentMapperCallsTransformer : IrElementTransformerVoidW
     private fun transformAddComponent(expression: IrCall): IrExpression {
         val type = expression.getValueArgument(0)!!.type
 
-        val componentMapperProperty = componentMapperPropertyAdder.addIfAbsent(currentTransformingClass, type)
+        val componentMapperProperty = addPropertyIfNeeded(currentTransformingClass, type)
 
         val builder = DeclarationIrBuilder(MetaData.context, componentMapperProperty.symbol)
 
@@ -131,5 +136,27 @@ class EntityWrapperToComponentMapperCallsTransformer : IrElementTransformerVoidW
         resultCall.type = expression.type
 
         return resultCall
+    }
+
+    private fun addPropertyIfNeeded(irClass: IrClass, irType: IrType): IrProperty {
+        val alreadyAdded = addedProperties[irClass]?.get(irType)
+        if (alreadyAdded != null) return alreadyAdded
+
+        val typeArgumentString = irType.classFqName!!.asString().replace(".", "_")
+        val idPropertyName = "generated_component_mapper_for_$typeArgumentString"
+
+        val thisPropertyType = MetaData.context.referenceClass(FqName("com.rdude.exECS.component.ComponentMapper"))!!
+            .typeWith(irType)
+
+        val resultProperty = irClass.createPropertyWithBackingField(
+            name = idPropertyName,
+            type = thisPropertyType,
+            isVar = true,
+            isLateInit = true
+        )
+
+        addedProperties.putIfAbsent(irClass, HashMap())
+        addedProperties[irClass]!![irType] = resultProperty
+        return resultProperty
     }
 }

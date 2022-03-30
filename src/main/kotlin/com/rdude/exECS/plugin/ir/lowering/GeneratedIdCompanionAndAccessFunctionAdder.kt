@@ -17,6 +17,7 @@ import org.jetbrains.kotlin.ir.builders.irGet
 import org.jetbrains.kotlin.ir.builders.irReturn
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrProperty
+import org.jetbrains.kotlin.ir.util.kotlinFqName
 import org.jetbrains.kotlin.name.Name
 
 class GeneratedIdCompanionAndAccessFunctionAdder(private val existingCompanions: MutableMap<IrClass, IrClass>) {
@@ -26,24 +27,26 @@ class GeneratedIdCompanionAndAccessFunctionAdder(private val existingCompanions:
     fun addTo(irClasses: Collection<IrClass>) {
         for (cl in irClasses) {
             val companion = existingCompanions.getOrPut(cl) { cl.createCompanionObject() }
-            val property = addIdPropertyTo(companion)
+            val property = addIdPropertyTo(companion, cl)
             addGetIdFunction(cl, companion, property)
         }
     }
 
-    private fun addIdPropertyTo(to: IrClass) =
-        to.createPropertyWithBackingField(
-            name = "execs_generated_id_property",
+    private fun addIdPropertyTo(toCompanion: IrClass, inClass: IrClass): IrProperty {
+        return toCompanion.createPropertyWithBackingField(
+            name = "execs_generated_id_property_for_${inClass.kotlinFqName.asString().replace(".", "_")}",
             type = MetaData.context.irBuiltIns.intType,
             isVar = true,
             isLateInit = false
         )
+    }
+
 
     private fun addGetIdFunction(irClass: IrClass, companion: IrClass, idProperty: IrProperty) {
         val function = IR_FACTORY.buildFun {
             this.name = Name.identifier("getTypeId")
             this.visibility = DescriptorVisibilities.PUBLIC
-            this.modality = Modality.FINAL
+            this.modality = Modality.OPEN
             this.returnType = MetaData.context.irBuiltIns.intType
             this.startOffset = irClass.startOffset
             this.endOffset = irClass.endOffset

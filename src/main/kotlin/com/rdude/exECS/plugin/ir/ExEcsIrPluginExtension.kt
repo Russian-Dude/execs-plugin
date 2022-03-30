@@ -65,7 +65,7 @@ class ExEcsIrPluginExtension() : IrGenerationExtension {
         }
         // add companions that holds type ids to components
         if (classes[componentFqName]?.isNotEmpty() == true) {
-            generatedIdAdder.addTo(classes[eventFqName]!!, Component)
+            generatedIdAdder.addTo(classes[componentFqName]!!, Component)
         }
 
 

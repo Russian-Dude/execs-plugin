@@ -9,7 +9,7 @@ import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
 import org.jetbrains.kotlin.ir.declarations.IrSimpleFunction
 
-class GetIdFakeToCompanionBasedFunctionTransformer : IrElementTransformerVoidWithContext() {
+class GetTypeIdFakeToCompanionBasedFunctionTransformer : IrElementTransformerVoidWithContext() {
 
     private lateinit var currentTransformTo: IrSimpleFunction
     private lateinit var currentType: HasId
@@ -22,7 +22,7 @@ class GetIdFakeToCompanionBasedFunctionTransformer : IrElementTransformerVoidWit
 
     override fun visitSimpleFunction(declaration: IrSimpleFunction): IrStatement {
         return if (declaration.origin == IrDeclarationOrigin.FAKE_OVERRIDE
-            && declaration.name.asString() == "get${currentType.idPropertyNamePrefix.toUpperCase()}TypeId"
+            && declaration.name.asString() == "get${currentType.idPropertyNamePrefix.capitalize()}TypeId"
             && declaration.returnType == MetaData.context.irBuiltIns.intType
             && declaration.dispatchReceiverParameter?.type == currentType.irType
         ) {

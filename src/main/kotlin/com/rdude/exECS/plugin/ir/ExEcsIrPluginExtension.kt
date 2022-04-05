@@ -1,6 +1,9 @@
 package com.rdude.exECS.plugin.ir
 
-import com.rdude.exECS.plugin.ir.lowering.GeneratedIdCompanionAndAccessFunctionAdder
+import com.rdude.exECS.plugin.ir.debug.DebugVisitor
+import com.rdude.exECS.plugin.ir.lowering.GeneratedComponentIdPropertyAdder
+import com.rdude.exECS.plugin.ir.lowering.GeneratedComponentInsideEntitiesPropertyAdder
+import com.rdude.exECS.plugin.ir.lowering.GeneratedTypeIdCompanionAndAccessFunctionAdder
 import com.rdude.exECS.plugin.ir.transform.EntityWrapperToComponentMapperCallsTransformer
 import com.rdude.exECS.plugin.ir.utils.MetaData
 import com.rdude.exECS.plugin.ir.utils.reference.Component
@@ -58,14 +61,26 @@ class ExEcsIrPluginExtension() : IrGenerationExtension {
         }
 
 
-        val generatedIdAdder = GeneratedIdCompanionAndAccessFunctionAdder(existingCompanions)
+        val generatedTypeIdAdder = GeneratedTypeIdCompanionAndAccessFunctionAdder(existingCompanions)
         // add companions that holds type ids to events
         if (classes[eventFqName]?.isNotEmpty() == true) {
-            generatedIdAdder.addTo(classes[eventFqName]!!, Event)
+            generatedTypeIdAdder.addTo(classes[eventFqName]!!, Event)
         }
         // add companions that holds type ids to components
         if (classes[componentFqName]?.isNotEmpty() == true) {
-            generatedIdAdder.addTo(classes[componentFqName]!!, Component)
+            generatedTypeIdAdder.addTo(classes[componentFqName]!!, Component)
+        }
+
+        // add generated id to components and id factory to component's companion
+        val generatedComponentIdPropertyAdder = GeneratedComponentIdPropertyAdder(existingCompanions)
+        if (classes[componentFqName]?.isNotEmpty() == true) {
+            generatedComponentIdPropertyAdder.addTo(classes[componentFqName]!!)
+        }
+
+        // override insideEntities property in components
+        val generatedComponentInsideEntitiesPropertyAdder = GeneratedComponentInsideEntitiesPropertyAdder()
+        if (classes[componentFqName]?.isNotEmpty() == true) {
+            generatedComponentInsideEntitiesPropertyAdder.addTo(classes[componentFqName]!!)
         }
 
 

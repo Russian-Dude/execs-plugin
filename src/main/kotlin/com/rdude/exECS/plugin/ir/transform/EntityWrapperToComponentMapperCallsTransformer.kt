@@ -2,7 +2,7 @@ package com.rdude.exECS.plugin.ir.transform
 
 import com.rdude.exECS.plugin.ir.utils.MetaData
 import com.rdude.exECS.plugin.ir.utils.Representation
-import com.rdude.exECS.plugin.ir.utils.createPropertyWithBackingField
+import com.rdude.exECS.plugin.ir.utils.createAndAddPropertyWithBackingField
 import com.rdude.exECS.plugin.ir.utils.reference.ComponentMapper
 import com.rdude.exECS.plugin.ir.utils.reference.EntityWrapper
 import com.rdude.exECS.plugin.ir.visit.CallsFinder
@@ -148,7 +148,7 @@ class EntityWrapperToComponentMapperCallsTransformer : IrElementTransformerVoidW
         val thisPropertyType = MetaData.context.referenceClass(FqName("com.rdude.exECS.component.ComponentMapper"))!!
             .typeWith(irType)
 
-        val resultProperty = irClass.createPropertyWithBackingField(
+        val resultProperty = irClass.createAndAddPropertyWithBackingField(
             name = idPropertyName,
             type = thisPropertyType,
             isVar = true,

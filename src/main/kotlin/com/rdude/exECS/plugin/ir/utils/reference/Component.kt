@@ -13,5 +13,15 @@ object Component : HasId {
             .single { it.owner.returnType == MetaData.context.irBuiltIns.intType && it.owner.valueParameters.isEmpty() && it.owner.typeParameters.isEmpty() }
     }
 
+    val getIdProperty by lazy {
+        MetaData.context.referenceProperties(FqName("com.rdude.exECS.component.Component.componentId"))
+            .single()
+    }
+
+    val insideEntitiesProperty by lazy {
+        MetaData.context.referenceProperties(FqName("com.rdude.exECS.component.Component.insideEntities"))
+            .single()
+    }
+
     override val idPropertyNamePrefix: String = "Component"
 }

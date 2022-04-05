@@ -7,33 +7,35 @@ import org.jetbrains.kotlin.backend.common.lower.irBlockBody
 import org.jetbrains.kotlin.descriptors.ClassKind
 import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.descriptors.Modality
+import org.jetbrains.kotlin.ir.builders.*
 import org.jetbrains.kotlin.ir.builders.declarations.*
-import org.jetbrains.kotlin.ir.builders.irBlockBody
-import org.jetbrains.kotlin.ir.builders.irGet
-import org.jetbrains.kotlin.ir.builders.irGetField
-import org.jetbrains.kotlin.ir.builders.irReturn
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
 import org.jetbrains.kotlin.ir.declarations.IrProperty
 import org.jetbrains.kotlin.ir.declarations.addMember
+import org.jetbrains.kotlin.ir.expressions.IrExpressionBody
 import org.jetbrains.kotlin.ir.expressions.impl.IrDelegatingConstructorCallImpl
 import org.jetbrains.kotlin.ir.expressions.impl.IrInstanceInitializerCallImpl
+import org.jetbrains.kotlin.ir.symbols.IrPropertySymbol
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.impl.IrSimpleTypeImpl
 import org.jetbrains.kotlin.ir.util.constructors
 import org.jetbrains.kotlin.ir.util.defaultType
 import org.jetbrains.kotlin.name.Name
 
-fun IrClass.createPropertyWithBackingField(
+fun createPropertyWithBackingField(
+    inClass: IrClass,
     name: String,
     type: IrType,
     isVar: Boolean = true,
+    isFinal: Boolean = false,
     isLateInit: Boolean = false,
+    overridden: List<IrPropertySymbol>? = null,
+    initializer: IrExpressionBody? = null
 ): IrProperty {
-
-    val property = this.factory.buildProperty {
-        this.startOffset = this@createPropertyWithBackingField.startOffset
-        this.endOffset = this@createPropertyWithBackingField.endOffset
+    val property = MetaData.context.irFactory.buildProperty {
+        this.startOffset = inClass.startOffset
+        this.endOffset = inClass.endOffset
         this.name = Name.identifier(name)
         this.isVar = isVar
         this.isLateinit = isLateInit
@@ -41,24 +43,26 @@ fun IrClass.createPropertyWithBackingField(
     }
 
     val field = MetaData.context.irFactory.buildField {
-        this.startOffset = this@createPropertyWithBackingField.startOffset
-        this.endOffset = this@createPropertyWithBackingField.endOffset
+        this.startOffset = inClass.startOffset
+        this.endOffset = inClass.endOffset
         this.type = type
-        this.isFinal = !isVar
+        this.isFinal = isFinal
         this.name = Name.identifier(name)
         this.origin = IrDeclarationOrigin.PROPERTY_BACKING_FIELD
     }
 
     val declarationIrBuilder = DeclarationIrBuilder(MetaData.context, field.symbol)
 
-    val accessorFun = IR_FACTORY.buildFun {
-        this.startOffset = this@createPropertyWithBackingField.startOffset
-        this.endOffset = this@createPropertyWithBackingField.endOffset
+    val getterFun = IR_FACTORY.buildFun {
+        this.startOffset = inClass.startOffset
+        this.endOffset = inClass.endOffset
         this.name = Name.special("<get-$name>")
         this.returnType = type
         this.origin = IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR
     }.also { function ->
-        function.dispatchReceiverParameter = this.thisReceiver!!.copyTo(function)
+        function.dispatchReceiverParameter = inClass.thisReceiver!!.copyTo(function)
+
+        overridden?.let { function.overriddenSymbols = listOf(it.first().owner.getter!!.symbol) }
 
         function.correspondingPropertySymbol = property.symbol
         function.body = DeclarationIrBuilder(MetaData.context, function.symbol).irBlockBody {
@@ -71,18 +75,79 @@ fun IrClass.createPropertyWithBackingField(
         }
     }
 
-    property.getter = accessorFun
+    if (isVar) {
+        val setterFun = IR_FACTORY.buildFun {
+            this.startOffset = inClass.startOffset
+            this.endOffset = inClass.endOffset
+            this.name = Name.special("<set-$name>")
+            this.returnType = MetaData.context.irBuiltIns.unitType
+            this.origin = IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR
+        }.also { function ->
+            function.dispatchReceiverParameter = inClass.thisReceiver!!.copyTo(function)
+
+            val valueParameter = buildValueParameter(function) {
+                this.startOffset = inClass.startOffset
+                this.endOffset = inClass.endOffset
+                this.name = Name.special("<set-?>")
+                this.type = type
+                this.index = 0
+            }
+            function.valueParameters = listOf(valueParameter)
+
+            overridden?.let { function.overriddenSymbols = listOf(it.first().owner.setter!!.symbol) }
+
+            function.correspondingPropertySymbol = property.symbol
+            function.body = DeclarationIrBuilder(MetaData.context, function.symbol).irBlockBody {
+                +this.irSetField(
+                    receiver = irGet(function.dispatchReceiverParameter!!),
+                    field = field,
+                    value = irGet(valueParameter)
+                )
+            }
+        }
+
+        property.setter = setterFun
+        property.setter!!.parent = inClass
+    }
+
+    property.getter = getterFun
+
+    overridden?.let {
+        property.overriddenSymbols = it
+    }
+
+    initializer?.let { field.initializer = it }
 
     property.backingField = field
     field.correspondingPropertySymbol = property.symbol
 
-    property.parent = this
-    this.addMember(property)
-    field.parent = this
-    accessorFun.parent = this
+    property.parent = inClass
+    property.backingField!!.parent = inClass
+    property.getter!!.parent = inClass
 
     return property
 }
+
+
+
+fun IrClass.createAndAddPropertyWithBackingField(
+    name: String,
+    type: IrType,
+    isVar: Boolean = true,
+    isFinal: Boolean = false,
+    isLateInit: Boolean = false,
+    overridden: List<IrPropertySymbol>? = null,
+    initializer: IrExpressionBody? = null
+): IrProperty {
+
+    val property = createPropertyWithBackingField(this, name, type, isVar, isFinal, isLateInit, overridden, initializer)
+
+    this.addMember(property)
+
+    return property
+}
+
+
 
 fun IrClass.createCompanionObject(
     name: String = "Companion"

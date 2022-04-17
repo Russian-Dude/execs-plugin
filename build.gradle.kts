@@ -44,7 +44,7 @@ gradlePlugin {
     }
 }
 
-publishing {
+/*publishing {
     publications {
         create<MavenPublication>("maven") {
             groupId = "com.russian-dude"
@@ -53,5 +53,5 @@ publishing {
             from(components["java"])
         }
     }
-}
+}*/
 

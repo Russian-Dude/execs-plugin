@@ -1,9 +1,14 @@
 package com.rdude.exECS.plugin.ir.utils
 
+import com.rdude.exECS.plugin.ir.utils.reference.Reference
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
+import org.jetbrains.kotlin.backend.common.lower.DeclarationIrBuilder
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.IrClass
+import org.jetbrains.kotlin.ir.declarations.IrDeclaration
 import org.jetbrains.kotlin.ir.expressions.IrCall
+import org.jetbrains.kotlin.ir.types.IrType
+import org.jetbrains.kotlin.ir.types.classFqName
 
 object MetaData {
     lateinit var context: IrPluginContext
@@ -31,4 +36,6 @@ fun <K, V> MutableMap<K, MutableList<V>>.merge(key: K, value: V) =
 
 fun <K, V> MutableMap<K, MutableSet<V>>.merge(key: K, value: V) =
     this.compute(key) { _, set -> set?.apply { add(value) } ?: mutableSetOf(value) }
+
+fun builderOf(irDeclaration: IrDeclaration) = DeclarationIrBuilder(MetaData.context, irDeclaration.symbol, irDeclaration.startOffset, irDeclaration.endOffset)
 

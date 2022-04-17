@@ -1,10 +1,14 @@
 package com.rdude.exECS.plugin.ir.utils.reference
 
 import com.rdude.exECS.plugin.ir.utils.MetaData
-import org.jetbrains.kotlin.ir.types.*
+import org.jetbrains.kotlin.ir.types.classOrNull
+import org.jetbrains.kotlin.ir.types.defaultType
+import org.jetbrains.kotlin.ir.types.isInt
+import org.jetbrains.kotlin.ir.types.isSubtypeOfClass
+import org.jetbrains.kotlin.ir.util.isFunction
 import org.jetbrains.kotlin.name.FqName
 
-object ComponentMapper {
+object ComponentMapper : Reference {
 
     val irType by lazy { MetaData.context.referenceClass(FqName("com.rdude.exECS.component.ComponentMapper"))?.defaultType!! }
 
@@ -28,5 +32,13 @@ object ComponentMapper {
             .single { symbol -> symbol.owner.valueParameters.size == 2
                     && symbol.owner.valueParameters[0].type.isInt()
                     && symbol.owner.valueParameters[1].type.isSubtypeOfClass(Component.irType!!.classOrNull!!) }
+    }
+
+    val addComponentWithApplyFun by lazy {
+        MetaData.context.referenceFunctions(FqName("com.rdude.exECS.component.ComponentMapper.addComponent"))
+            .single { symbol -> symbol.owner.valueParameters.size == 3
+                    && symbol.owner.valueParameters[0].type.isInt()
+                    && symbol.owner.valueParameters[1].type.isSubtypeOfClass(Component.irType!!.classOrNull!!)
+                    && symbol.owner.valueParameters[2].type.isFunction() }
     }
 }

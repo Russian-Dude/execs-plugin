@@ -9,10 +9,11 @@ import org.jetbrains.kotlin.ir.types.classOrNull
 import org.jetbrains.kotlin.ir.types.defaultType
 import org.jetbrains.kotlin.ir.types.isKClass
 import org.jetbrains.kotlin.ir.types.isSubtypeOfClass
+import org.jetbrains.kotlin.ir.util.isFunction
 import org.jetbrains.kotlin.ir.util.kotlinFqName
 import org.jetbrains.kotlin.name.FqName
 
-object EntityWrapper {
+object EntityWrapper : Reference {
 
     val irType by lazy { MetaData.context.referenceClass(FqName("com.rdude.exECS.entity.EntityWrapper"))!!.defaultType }
 
@@ -167,6 +168,44 @@ object EntityWrapper {
     val addComponentFun = object : FakeOverrideFunctionRepresentation {
         override fun invoke(irCall: IrCall, irClass: IrClass): Boolean {
             return fakeOverrideAddComponentFunctions.getOrPut(irClass) { getAddComponentFunctions(irClass) }
+                .contains(irCall.symbol.owner)
+        }
+    }
+
+    private fun getAddPoolableComponentFunctions(fakeOverrideInClass: IrClass): List<IrSimpleFunction> {
+        val classFqName = fakeOverrideInClass.kotlinFqName.asString()
+        return listOf(
+            // wrapper.addComponent<T>()
+            MetaData.context.referenceFunctions(FqName("$classFqName.addComponent"))
+                .filter {
+                    it.owner.valueParameters.isEmpty()
+                            && it.owner.typeParameters.size == 1
+                            && it.owner.typeParameters[0].defaultType.isSubtypeOfClass(Component.irType!!.classOrNull!!)
+                            && it.owner.typeParameters[0].defaultType.isSubtypeOfClass(Poolable.irType!!.classOrNull!!)
+                            && it.owner.extensionReceiverParameter?.type == irType
+                            && it.owner.dispatchReceiverParameter?.type == System.irType
+                },
+            // wrapper.addComponent<T> { ... }
+            MetaData.context.referenceFunctions(FqName("$classFqName.addComponent"))
+                .filter {
+                    it.owner.valueParameters.size == 1
+                            && it.owner.valueParameters[0].type.isFunction()
+                            && it.owner.typeParameters.size == 1
+                            && it.owner.typeParameters[0].defaultType.isSubtypeOfClass(Component.irType!!.classOrNull!!)
+                            && it.owner.typeParameters[0].defaultType.isSubtypeOfClass(Poolable.irType!!.classOrNull!!)
+                            && it.owner.extensionReceiverParameter?.type == irType
+                            && it.owner.dispatchReceiverParameter?.type == System.irType
+                }
+        )
+            .flatten()
+            .map { it.owner }
+    }
+
+    private val fakeOverrideAddPoolableComponentFunctions = mutableMapOf<IrClass, List<IrSimpleFunction>>()
+
+    val addPoolableComponentFun = object : FakeOverrideFunctionRepresentation {
+        override fun invoke(irCall: IrCall, irClass: IrClass): Boolean {
+            return fakeOverrideAddPoolableComponentFunctions.getOrPut(irClass) { getAddPoolableComponentFunctions(irClass) }
                 .contains(irCall.symbol.owner)
         }
     }

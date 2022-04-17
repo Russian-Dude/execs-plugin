@@ -30,6 +30,11 @@ tasks.withType<KotlinCompile>() {
     kotlinOptions.freeCompilerArgs += "-Xjvm-default=enable"
 }
 
+java {
+    sourceCompatibility = JavaVersion.VERSION_16
+    targetCompatibility = JavaVersion.VERSION_16
+}
+
 gradlePlugin {
     plugins {
         create("com.russian-dude.execs-plugin") {

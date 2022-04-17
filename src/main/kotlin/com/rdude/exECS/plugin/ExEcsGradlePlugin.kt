@@ -23,7 +23,7 @@ class ExEcsGradlePlugin : Plugin<Project>, KotlinCompilerPluginSupportPlugin {
     override fun getCompilerPluginId(): String = "execs"
 
     override fun getPluginArtifact(): SubpluginArtifact =
-        SubpluginArtifact(groupId = "com.russian-dude", artifactId = "com.russian-dude.execs-plugin", version = "1.3.1")
+        SubpluginArtifact(groupId = "com.russian-dude", artifactId = "com.russian-dude.execs-plugin", version = "1.4.0")
 
     override fun isApplicable(kotlinCompilation: KotlinCompilation<*>): Boolean = true
 }

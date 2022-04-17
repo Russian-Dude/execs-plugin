@@ -8,7 +8,7 @@ import org.jetbrains.kotlin.config.CompilerConfiguration
 
 class ExEcsCommandLineProcessor : CommandLineProcessor {
 
-    override val pluginId: String = "execs"
+    override val pluginId: String = "execs-plugin"
     override val pluginOptions: Collection<AbstractCliOption> = listOf(OUTPUT_DIR_OPTION)
 
     override fun processOption(option: AbstractCliOption, value: String, configuration: CompilerConfiguration) {

@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.russian-dude"
-version = "1.4.0"
+version = "1.4.1"
 
 repositories {
     mavenCentral()
@@ -38,7 +38,7 @@ java {
 gradlePlugin {
     plugins {
         create("com.russian-dude.execs-plugin") {
-            id = "com.russian-dude.execs-plugin"
+            id = "execs-plugin"
             implementationClass = "com.rdude.exECS.plugin.ExEcsGradlePlugin"
         }
     }
@@ -49,7 +49,7 @@ publishing {
         create<MavenPublication>("maven") {
             groupId = "com.russian-dude"
             artifactId = "execs-plugin"
-            version = "1.4.0"
+            version = "1.4.1"
             from(components["java"])
         }
     }

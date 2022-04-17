@@ -2,14 +2,18 @@ package com.rdude.exECS.plugin.ir.transform
 
 import com.rdude.exECS.plugin.ir.utils.MetaData
 import com.rdude.exECS.plugin.ir.utils.Representation
+import com.rdude.exECS.plugin.ir.utils.builderOf
 import com.rdude.exECS.plugin.ir.utils.createAndAddPropertyWithBackingField
 import com.rdude.exECS.plugin.ir.utils.reference.ComponentMapper
 import com.rdude.exECS.plugin.ir.utils.reference.EntityWrapper
+import com.rdude.exECS.plugin.ir.utils.reference.Pool
 import com.rdude.exECS.plugin.ir.visit.CallsFinder
+import com.rdude.exECS.plugin.ir.visit.PoolsMapper
 import org.jetbrains.kotlin.backend.common.IrElementTransformerVoidWithContext
 import org.jetbrains.kotlin.backend.common.lower.DeclarationIrBuilder
 import org.jetbrains.kotlin.ir.builders.irCall
 import org.jetbrains.kotlin.ir.builders.irGet
+import org.jetbrains.kotlin.ir.builders.irGetObject
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrFunction
 import org.jetbrains.kotlin.ir.declarations.IrProperty
@@ -21,7 +25,8 @@ import org.jetbrains.kotlin.ir.types.classFqName
 import org.jetbrains.kotlin.ir.types.typeWith
 import org.jetbrains.kotlin.name.FqName
 
-class EntityWrapperToComponentMapperCallsTransformer : IrElementTransformerVoidWithContext() {
+class EntityWrapperToComponentMapperCallsTransformer(val poolsMapper: PoolsMapper) :
+    IrElementTransformerVoidWithContext() {
 
     private val addedProperties: MutableMap<IrClass, MutableMap<IrType, IrProperty>> = HashMap()
 
@@ -48,6 +53,7 @@ class EntityWrapperToComponentMapperCallsTransformer : IrElementTransformerVoidW
             EntityWrapper.hasComponentFun -> transformHasComponent(expression)
             EntityWrapper.removeComponentFun -> transformRemoveComponent(expression)
             EntityWrapper.addComponentFun -> transformAddComponent(expression)
+            EntityWrapper.addPoolableComponentFun -> transformAddPoolableComponent(expression)
             else -> throw IllegalStateException("Unknown ir call representation $currentTransformingCallRepresentation")
         }
     }
@@ -133,6 +139,51 @@ class EntityWrapperToComponentMapperCallsTransformer : IrElementTransformerVoidW
         resultCall.dispatchReceiver = getComponentMapperCall
         resultCall.putValueArgument(0, getEntityIdCall)
         resultCall.putValueArgument(1, expression.getValueArgument(0))
+        resultCall.type = expression.type
+
+        return resultCall
+    }
+
+    private fun transformAddPoolableComponent(expression: IrCall): IrExpression {
+        val applyFunction =
+            if (expression.valueArgumentsCount == 1) expression.getValueArgument(0)!!
+            else null
+
+        val type = expression.getTypeArgument(0)!!
+
+        val componentMapperProperty = addPropertyIfNeeded(currentTransformingClass, type)
+
+        val builder = DeclarationIrBuilder(MetaData.context, componentMapperProperty.symbol)
+
+        val getComponentMapperCall = builder.irCall(componentMapperProperty.getter!!)
+        getComponentMapperCall.dispatchReceiver = builder.irGet(currentTransformingFunction.dispatchReceiverParameter!!)
+
+        val getEntityIdCall = builder.irCall(EntityWrapper.getEntityIdProperty.owner.getter!!)
+        getEntityIdCall.dispatchReceiver = expression.extensionReceiver!!
+
+        val poolPropertyInfo = poolsMapper[type] ?: return expression
+
+        val poolBuilder = builderOf(poolPropertyInfo.property)
+
+        val getPoolCall = builder.irCall(poolPropertyInfo.property.getter!!)
+        getPoolCall.dispatchReceiver = poolBuilder.irGetObject(poolPropertyInfo.companion.symbol)
+        getPoolCall.type = Pool.irTypeWith(type)
+
+        val obtainComponentCall = poolBuilder.irCall(Pool.obtainFun)
+        obtainComponentCall.dispatchReceiver = getPoolCall
+        obtainComponentCall.type = type
+
+        val resultCall =
+            if (applyFunction != null) builder.irCall(ComponentMapper.addComponentWithApplyFun)
+            else builder.irCall(ComponentMapper.addComponentFun)
+
+        resultCall.dispatchReceiver = getComponentMapperCall
+        resultCall.putValueArgument(0, getEntityIdCall)
+        resultCall.putValueArgument(1, obtainComponentCall)
+        if (applyFunction != null) {
+            resultCall.putValueArgument(2, expression.getValueArgument(0))
+        }
+
         resultCall.type = expression.type
 
         return resultCall

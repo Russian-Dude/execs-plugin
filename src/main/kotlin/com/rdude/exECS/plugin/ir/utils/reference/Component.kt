@@ -4,7 +4,7 @@ import com.rdude.exECS.plugin.ir.utils.MetaData
 import org.jetbrains.kotlin.ir.types.defaultType
 import org.jetbrains.kotlin.name.FqName
 
-object Component : HasId {
+object Component : HasId, Reference {
 
     override val irType by lazy { MetaData.context.referenceClass(FqName("com.rdude.exECS.component.Component"))!!.defaultType }
 

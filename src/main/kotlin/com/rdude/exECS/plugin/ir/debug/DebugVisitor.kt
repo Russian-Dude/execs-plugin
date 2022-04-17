@@ -17,6 +17,7 @@ class DebugVisitor : IrElementVisitorVoid {
         super.visitClass(declaration)
         if (declaration.kotlinFqName.asString() == "com.rdude.ecsbenchmarks.TestIrSystem") {
             debugMessage("DUMP OF TEST IR SYSTEM:\r\n${declaration.dump()}")
+            CustomDumper().dump(declaration)
         }
     }
 }

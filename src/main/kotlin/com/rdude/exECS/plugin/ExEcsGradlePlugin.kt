@@ -26,7 +26,7 @@ class ExEcsGradlePlugin : Plugin<Project>, KotlinCompilerPluginSupportPlugin {
         SubpluginArtifact(
             groupId = "com.github.Russian-Dude.execs-plugin",
             artifactId = "exECS_plugin",
-            version = "1.4.0-1.0.2")
+            version = "1.4.0-1.0.3")
 
     override fun isApplicable(kotlinCompilation: KotlinCompilation<*>): Boolean = true
 }

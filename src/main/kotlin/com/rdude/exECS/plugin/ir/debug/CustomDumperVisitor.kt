@@ -137,6 +137,8 @@ class CustomDumperVisitor : IrElementVisitor<Unit, CustomDumperVisitor.Entry?> {
         val entry = Entry(expression)
         last = entry
         entry.parent = data
+        entry.dispatchReceiver = expression.dispatchReceiver
+        entry.extensionReciver = expression.extensionReceiver
         data?.let { it.children += entry }
         entry.mainInfo = info
         super.visitCall(expression, data)
@@ -1245,6 +1247,8 @@ class CustomDumperVisitor : IrElementVisitor<Unit, CustomDumperVisitor.Entry?> {
         var returnType: IrType? = null
         var override: List<IrSymbol>? = null
         val children = mutableListOf<Entry>()
+        var dispatchReceiver: IrExpression? = null
+        var extensionReciver: IrExpression? = null
     }
 
     companion object {

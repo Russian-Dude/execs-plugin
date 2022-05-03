@@ -6,6 +6,8 @@ import org.jetbrains.kotlin.name.FqName
 
 object Poolable : Reference {
 
-    val irType by lazy { MetaData.context.referenceClass(FqName("com.rdude.exECS.pool.Poolable"))!!.defaultType }
+    val classSymbol by lazy { MetaData.context.referenceClass(FqName("com.rdude.exECS.pool.Poolable"))!! }
+
+    val irType by lazy { classSymbol.defaultType }
 
 }

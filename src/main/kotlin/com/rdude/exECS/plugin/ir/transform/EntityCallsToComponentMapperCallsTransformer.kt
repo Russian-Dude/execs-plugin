@@ -7,6 +7,7 @@ import com.rdude.exECS.plugin.ir.utils.createAndAddPropertyWithBackingField
 import com.rdude.exECS.plugin.ir.utils.reference.ComponentMapper
 import com.rdude.exECS.plugin.ir.utils.reference.EntityWrapper
 import com.rdude.exECS.plugin.ir.utils.reference.Pool
+import com.rdude.exECS.plugin.ir.utils.reference.SingletonEntity
 import com.rdude.exECS.plugin.ir.visit.CallsFinder
 import com.rdude.exECS.plugin.ir.visit.PoolsMapper
 import org.jetbrains.kotlin.backend.common.IrElementTransformerVoidWithContext
@@ -25,13 +26,16 @@ import org.jetbrains.kotlin.ir.types.classFqName
 import org.jetbrains.kotlin.ir.types.typeWith
 import org.jetbrains.kotlin.name.FqName
 
-class EntityWrapperToComponentMapperCallsTransformer(val poolsMapper: PoolsMapper) :
+class EntityCallsToComponentMapperCallsTransformer(val poolsMapper: PoolsMapper) :
     IrElementTransformerVoidWithContext() {
+
+    private enum class EntityType { WRAPPER, SINGLETON }
 
     private val addedProperties: MutableMap<IrClass, MutableMap<IrType, IrProperty>> = HashMap()
 
     private lateinit var currentTransformingCall: IrCall
     private lateinit var currentTransformingFunction: IrFunction
+    private lateinit var currentInsideClassTransformingFunction: IrFunction
     private lateinit var currentTransformingClass: IrClass
     private lateinit var currentTransformingCallRepresentation: Representation<IrCall>
 
@@ -39,6 +43,7 @@ class EntityWrapperToComponentMapperCallsTransformer(val poolsMapper: PoolsMappe
         this.currentTransformingClass = callData.insideClass
         this.currentTransformingCall = callData.call
         this.currentTransformingFunction = callData.insideFunction
+        this.currentInsideClassTransformingFunction = callData.insideClassFunction
         this.currentTransformingCallRepresentation = callData.representationOf
 
         currentTransformingFunction.transform(this, null)
@@ -49,26 +54,41 @@ class EntityWrapperToComponentMapperCallsTransformer(val poolsMapper: PoolsMappe
         if (expression != currentTransformingCall) return expression
 
         return when (currentTransformingCallRepresentation) {
-            EntityWrapper.getComponentFun -> transformGetComponent(expression)
-            EntityWrapper.hasComponentFun -> transformHasComponent(expression)
-            EntityWrapper.removeComponentFun -> transformRemoveComponent(expression)
-            EntityWrapper.addComponentFun -> transformAddComponent(expression)
-            EntityWrapper.addPoolableComponentFun -> transformAddPoolableComponent(expression)
+            EntityWrapper.getComponentFun -> transformGetComponent(expression, EntityType.WRAPPER)
+            EntityWrapper.hasComponentFun -> transformHasComponent(expression, EntityType.WRAPPER)
+            EntityWrapper.removeComponentFun -> transformRemoveComponent(expression, EntityType.WRAPPER)
+            EntityWrapper.addComponentFun -> transformAddComponent(expression, EntityType.WRAPPER)
+            EntityWrapper.addPoolableComponentFun -> transformAddPoolableComponent(expression, EntityType.WRAPPER)
+
+            SingletonEntity.getComponentFun -> transformGetComponent(expression, EntityType.SINGLETON)
+            SingletonEntity.hasComponentFun -> transformHasComponent(expression, EntityType.SINGLETON)
+            SingletonEntity.removeComponentFun -> transformRemoveComponent(expression, EntityType.SINGLETON)
+            SingletonEntity.addComponentFun -> transformAddComponent(expression, EntityType.SINGLETON)
+            SingletonEntity.addPoolableComponentFun -> transformAddPoolableComponent(expression, EntityType.SINGLETON)
             else -> throw IllegalStateException("Unknown ir call representation $currentTransformingCallRepresentation")
         }
     }
 
-    private fun transformGetComponent(expression: IrCall): IrExpression {
+    private fun transformGetComponent(expression: IrCall, entityType: EntityType): IrExpression {
         val type = expression.getTypeArgument(0)!!
         val componentMapperProperty = addPropertyIfNeeded(currentTransformingClass, type)
 
         val builder = DeclarationIrBuilder(MetaData.context, componentMapperProperty.symbol)
 
         val getComponentMapperCall = builder.irCall(componentMapperProperty.getter!!)
-        getComponentMapperCall.dispatchReceiver = builder.irGet(currentTransformingFunction.dispatchReceiverParameter!!)
 
-        val getEntityIdCall = builder.irCall(EntityWrapper.getEntityIdProperty.owner.getter!!)
-        getEntityIdCall.dispatchReceiver = expression.extensionReceiver!!
+        getComponentMapperCall.dispatchReceiver = builder
+            .irGet(currentInsideClassTransformingFunction.dispatchReceiverParameter!!)
+
+        val getEntityIdCall = when (entityType) {
+            EntityType.WRAPPER -> builder.irCall(EntityWrapper.getEntityIdProperty.owner.getter!!)
+            EntityType.SINGLETON -> builder.irCall(SingletonEntity.entityIdProperty.owner.getter!!)
+        }
+
+        getEntityIdCall.dispatchReceiver = when(entityType) {
+            EntityType.WRAPPER -> expression.extensionReceiver!!
+            EntityType.SINGLETON -> expression.dispatchReceiver!!
+        }
 
         val resultCall = builder.irCall(ComponentMapper.getComponentFun)
         resultCall.dispatchReceiver = getComponentMapperCall
@@ -78,7 +98,7 @@ class EntityWrapperToComponentMapperCallsTransformer(val poolsMapper: PoolsMappe
         return resultCall
     }
 
-    private fun transformHasComponent(expression: IrCall): IrExpression {
+    private fun transformHasComponent(expression: IrCall, entityType: EntityType): IrExpression {
         val type =
             if (expression.typeArgumentsCount == 1) expression.getTypeArgument(0)!!
             else (expression.getValueArgument(0)!! as IrClassReference).classType
@@ -87,10 +107,18 @@ class EntityWrapperToComponentMapperCallsTransformer(val poolsMapper: PoolsMappe
         val builder = DeclarationIrBuilder(MetaData.context, componentMapperProperty.symbol)
 
         val getComponentMapperCall = builder.irCall(componentMapperProperty.getter!!)
-        getComponentMapperCall.dispatchReceiver = builder.irGet(currentTransformingFunction.dispatchReceiverParameter!!)
+        getComponentMapperCall.dispatchReceiver = builder
+            .irGet(currentInsideClassTransformingFunction.dispatchReceiverParameter!!)
 
-        val getEntityIdCall = builder.irCall(EntityWrapper.getEntityIdProperty.owner.getter!!)
-        getEntityIdCall.dispatchReceiver = expression.extensionReceiver!!
+        val getEntityIdCall = when (entityType) {
+            EntityType.WRAPPER -> builder.irCall(EntityWrapper.getEntityIdProperty.owner.getter!!)
+            EntityType.SINGLETON -> builder.irCall(SingletonEntity.entityIdProperty.owner.getter!!)
+        }
+
+        getEntityIdCall.dispatchReceiver = when(entityType) {
+            EntityType.WRAPPER -> expression.extensionReceiver!!
+            EntityType.SINGLETON -> expression.dispatchReceiver!!
+        }
 
         val resultCall = builder.irCall(ComponentMapper.hasComponentFun)
         resultCall.dispatchReceiver = getComponentMapperCall
@@ -100,7 +128,7 @@ class EntityWrapperToComponentMapperCallsTransformer(val poolsMapper: PoolsMappe
         return resultCall
     }
 
-    private fun transformRemoveComponent(expression: IrCall): IrExpression {
+    private fun transformRemoveComponent(expression: IrCall, entityType: EntityType): IrExpression {
         val type =
             if (expression.typeArgumentsCount == 1) expression.getTypeArgument(0)!!
             else (expression.getValueArgument(0)!! as IrClassReference).classType
@@ -109,10 +137,18 @@ class EntityWrapperToComponentMapperCallsTransformer(val poolsMapper: PoolsMappe
         val builder = DeclarationIrBuilder(MetaData.context, componentMapperProperty.symbol)
 
         val getComponentMapperCall = builder.irCall(componentMapperProperty.getter!!)
-        getComponentMapperCall.dispatchReceiver = builder.irGet(currentTransformingFunction.dispatchReceiverParameter!!)
+        getComponentMapperCall.dispatchReceiver = builder
+            .irGet(currentInsideClassTransformingFunction.dispatchReceiverParameter!!)
 
-        val getEntityIdCall = builder.irCall(EntityWrapper.getEntityIdProperty.owner.getter!!)
-        getEntityIdCall.dispatchReceiver = expression.extensionReceiver!!
+        val getEntityIdCall = when (entityType) {
+            EntityType.WRAPPER -> builder.irCall(EntityWrapper.getEntityIdProperty.owner.getter!!)
+            EntityType.SINGLETON -> builder.irCall(SingletonEntity.entityIdProperty.owner.getter!!)
+        }
+
+        getEntityIdCall.dispatchReceiver = when(entityType) {
+            EntityType.WRAPPER -> expression.extensionReceiver!!
+            EntityType.SINGLETON -> expression.dispatchReceiver!!
+        }
 
         val resultCall = builder.irCall(ComponentMapper.removeComponentFun)
         resultCall.dispatchReceiver = getComponentMapperCall
@@ -122,7 +158,7 @@ class EntityWrapperToComponentMapperCallsTransformer(val poolsMapper: PoolsMappe
         return resultCall
     }
 
-    private fun transformAddComponent(expression: IrCall): IrExpression {
+    private fun transformAddComponent(expression: IrCall, entityType: EntityType): IrExpression {
         val type = expression.getValueArgument(0)!!.type
 
         val componentMapperProperty = addPropertyIfNeeded(currentTransformingClass, type)
@@ -130,10 +166,18 @@ class EntityWrapperToComponentMapperCallsTransformer(val poolsMapper: PoolsMappe
         val builder = DeclarationIrBuilder(MetaData.context, componentMapperProperty.symbol)
 
         val getComponentMapperCall = builder.irCall(componentMapperProperty.getter!!)
-        getComponentMapperCall.dispatchReceiver = builder.irGet(currentTransformingFunction.dispatchReceiverParameter!!)
+        getComponentMapperCall.dispatchReceiver = builder
+            .irGet(currentInsideClassTransformingFunction.dispatchReceiverParameter!!)
 
-        val getEntityIdCall = builder.irCall(EntityWrapper.getEntityIdProperty.owner.getter!!)
-        getEntityIdCall.dispatchReceiver = expression.extensionReceiver!!
+        val getEntityIdCall = when (entityType) {
+            EntityType.WRAPPER -> builder.irCall(EntityWrapper.getEntityIdProperty.owner.getter!!)
+            EntityType.SINGLETON -> builder.irCall(SingletonEntity.entityIdProperty.owner.getter!!)
+        }
+
+        getEntityIdCall.dispatchReceiver = when(entityType) {
+            EntityType.WRAPPER -> expression.extensionReceiver!!
+            EntityType.SINGLETON -> expression.dispatchReceiver!!
+        }
 
         val resultCall = builder.irCall(ComponentMapper.addComponentFun)
         resultCall.dispatchReceiver = getComponentMapperCall
@@ -144,7 +188,7 @@ class EntityWrapperToComponentMapperCallsTransformer(val poolsMapper: PoolsMappe
         return resultCall
     }
 
-    private fun transformAddPoolableComponent(expression: IrCall): IrExpression {
+    private fun transformAddPoolableComponent(expression: IrCall, entityType: EntityType): IrExpression {
         val applyFunction =
             if (expression.valueArgumentsCount == 1) expression.getValueArgument(0)!!
             else null
@@ -156,10 +200,18 @@ class EntityWrapperToComponentMapperCallsTransformer(val poolsMapper: PoolsMappe
         val builder = DeclarationIrBuilder(MetaData.context, componentMapperProperty.symbol)
 
         val getComponentMapperCall = builder.irCall(componentMapperProperty.getter!!)
-        getComponentMapperCall.dispatchReceiver = builder.irGet(currentTransformingFunction.dispatchReceiverParameter!!)
+        getComponentMapperCall.dispatchReceiver = builder
+            .irGet(currentInsideClassTransformingFunction.dispatchReceiverParameter!!)
 
-        val getEntityIdCall = builder.irCall(EntityWrapper.getEntityIdProperty.owner.getter!!)
-        getEntityIdCall.dispatchReceiver = expression.extensionReceiver!!
+        val getEntityIdCall = when (entityType) {
+            EntityType.WRAPPER -> builder.irCall(EntityWrapper.getEntityIdProperty.owner.getter!!)
+            EntityType.SINGLETON -> builder.irCall(SingletonEntity.entityIdProperty.owner.getter!!)
+        }
+
+        getEntityIdCall.dispatchReceiver = when(entityType) {
+            EntityType.WRAPPER -> expression.extensionReceiver!!
+            EntityType.SINGLETON -> expression.dispatchReceiver!!
+        }
 
         val poolPropertyInfo = poolsMapper[type] ?: return expression
 

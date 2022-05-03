@@ -13,46 +13,50 @@ import org.jetbrains.kotlin.ir.util.isFunction
 import org.jetbrains.kotlin.ir.util.kotlinFqName
 import org.jetbrains.kotlin.name.FqName
 
-object EntityWrapper : Reference {
+object SingletonEntity : Reference {
 
-    val irType by lazy { MetaData.context.referenceClass(FqName("com.rdude.exECS.entity.EntityWrapper"))!!.defaultType }
+    val irType by lazy { MetaData.context.referenceClass(FqName("com.rdude.exECS.entity.SingletonEntity"))!!.defaultType }
 
     private fun getGetComponentFunctions(fakeOverrideInClass: IrClass): List<IrSimpleFunction> {
         val classFqName = fakeOverrideInClass.kotlinFqName.asString()
         return listOf(
-            // wrapper.getComponent<T>()
+            // getComponent<T>()
             MetaData.context.referenceFunctions(FqName("$classFqName.getComponent"))
                 .filter {
                     it.owner.valueParameters.isEmpty()
                             && it.owner.typeParameters.size == 1
-                            && it.owner.extensionReceiverParameter?.type == irType
-                            && it.owner.dispatchReceiverParameter?.type == System.irType
+                            && it.owner.typeParameters[0].defaultType.isSubtypeOfClass(Component.irType.classOrNull!!)
+                            && it.owner.dispatchReceiverParameter?.type == irType
+                            && it.owner.extensionReceiverParameter == null
                 },
-            // wrapper.getComponent(T::class)
+            // getComponent(T::class)
             MetaData.context.referenceFunctions(FqName("$classFqName.getComponent"))
                 .filter {
                     it.owner.valueParameters.size == 1
                             && it.owner.typeParameters.size == 1
                             && it.owner.valueParameters[0].type.isKClass()
-                            && it.owner.extensionReceiverParameter?.type == irType
-                            && it.owner.dispatchReceiverParameter?.type == System.irType
+                            && it.owner.typeParameters[0].defaultType.isSubtypeOfClass(Component.irType.classOrNull!!)
+                            && it.owner.dispatchReceiverParameter?.type == irType
+                            && it.owner.extensionReceiverParameter == null
                 },
-            // wrapper[T::class]
+            // [T::class]
             MetaData.context.referenceFunctions(FqName("$classFqName.get"))
                 .filter {
                     it.owner.valueParameters.size == 1
                             && it.owner.typeParameters.size == 1
                             && it.owner.valueParameters[0].type.isKClass()
-                            && it.owner.extensionReceiverParameter?.type == irType
-                            && it.owner.dispatchReceiverParameter?.type == System.irType
+                            && it.owner.typeParameters[0].defaultType.isSubtypeOfClass(Component.irType.classOrNull!!)
+                            && it.owner.dispatchReceiverParameter?.type == irType
+                            && it.owner.extensionReceiverParameter == null
                 },
-            // wrapper<T>()
+            // <T>()
             MetaData.context.referenceFunctions(FqName("$classFqName.invoke"))
                 .filter {
                     it.owner.valueParameters.isEmpty()
                             && it.owner.typeParameters.size == 1
-                            && it.owner.extensionReceiverParameter?.type == irType
-                            && it.owner.dispatchReceiverParameter?.type == System.irType
+                            && it.owner.typeParameters[0].defaultType.isSubtypeOfClass(Component.irType.classOrNull!!)
+                            && it.owner.dispatchReceiverParameter?.type == irType
+                            && it.owner.extensionReceiverParameter == null
                 }
         )
             .flatten()
@@ -71,22 +75,23 @@ object EntityWrapper : Reference {
     private fun getHasComponentFunctions(fakeOverrideInClass: IrClass): List<IrSimpleFunction> {
         val classFqName = fakeOverrideInClass.kotlinFqName.asString()
         return listOf(
-            // wrapper.hasComponent<T>()
+            // hasComponent<T>()
             MetaData.context.referenceFunctions(FqName("$classFqName.hasComponent"))
                 .filter {
                     it.owner.valueParameters.isEmpty()
                             && it.owner.typeParameters.size == 1
-                            && it.owner.extensionReceiverParameter?.type == irType
-                            && it.owner.dispatchReceiverParameter?.type == System.irType
+                            && it.owner.typeParameters[0].defaultType.isSubtypeOfClass(Component.irType.classOrNull!!)
+                            && it.owner.dispatchReceiverParameter?.type == irType
+                            && it.owner.extensionReceiverParameter == null
                 },
-            // wrapper.hasComponent(T::class)
+            // hasComponent(T::class)
             MetaData.context.referenceFunctions(FqName("$classFqName.hasComponent"))
                 .filter {
                     it.owner.valueParameters.size == 1
                             && it.owner.typeParameters.isEmpty()
                             && it.owner.valueParameters[0].type.isKClass()
-                            && it.owner.extensionReceiverParameter?.type == irType
-                            && it.owner.dispatchReceiverParameter?.type == System.irType
+                            && it.owner.dispatchReceiverParameter?.type == irType
+                            && it.owner.extensionReceiverParameter == null
                 }
         )
             .flatten()
@@ -105,31 +110,32 @@ object EntityWrapper : Reference {
     private fun getRemoveComponentFunctions(fakeOverrideInClass: IrClass): List<IrSimpleFunction> {
         val classFqName = fakeOverrideInClass.kotlinFqName.asString()
         return listOf(
-            // wrapper.removeComponent<T>()
+            // removeComponent<T>()
             MetaData.context.referenceFunctions(FqName("$classFqName.removeComponent"))
                 .filter {
                     it.owner.valueParameters.isEmpty()
                             && it.owner.typeParameters.size == 1
-                            && it.owner.extensionReceiverParameter?.type == irType
-                            && it.owner.dispatchReceiverParameter?.type == System.irType
+                            && it.owner.typeParameters[0].defaultType.isSubtypeOfClass(Component.irType.classOrNull!!)
+                            && it.owner.dispatchReceiverParameter?.type == irType
+                            && it.owner.extensionReceiverParameter == null
                 },
-            // wrapper.removeComponent(T::class)
+            // removeComponent(T::class)
             MetaData.context.referenceFunctions(FqName("$classFqName.removeComponent"))
                 .filter {
                     it.owner.valueParameters.size == 1
                             && it.owner.typeParameters.isEmpty()
                             && it.owner.valueParameters[0].type.isKClass()
-                            && it.owner.extensionReceiverParameter?.type == irType
-                            && it.owner.dispatchReceiverParameter?.type == System.irType
+                            && it.owner.dispatchReceiverParameter?.type == irType
+                            && it.owner.extensionReceiverParameter == null
                 },
-            // wrapper -= T::class
+            // singleton -= T::class
             MetaData.context.referenceFunctions(FqName("$classFqName.minusAssign"))
                 .filter {
                     it.owner.valueParameters.size == 1
                             && it.owner.typeParameters.isEmpty()
                             && it.owner.valueParameters[0].type.isKClass()
-                            && it.owner.extensionReceiverParameter?.type == irType
-                            && it.owner.dispatchReceiverParameter?.type == System.irType
+                            && it.owner.dispatchReceiverParameter?.type == irType
+                            && it.owner.extensionReceiverParameter == null
                 }
         )
             .flatten()
@@ -148,23 +154,23 @@ object EntityWrapper : Reference {
     private fun getAddComponentFunctions(fakeOverrideInClass: IrClass): List<IrSimpleFunction> {
         val classFqName = fakeOverrideInClass.kotlinFqName.asString()
         return listOf(
-            // wrapper.addComponent(component)
+            // addComponent(component)
             MetaData.context.referenceFunctions(FqName("$classFqName.addComponent"))
                 .filter {
                     it.owner.valueParameters.size == 1
                             && it.owner.typeParameters.isEmpty()
-                            && it.owner.valueParameters[0].type.isSubtypeOfClass(Component.irType!!.classOrNull!!)
-                            && it.owner.extensionReceiverParameter?.type == irType
-                            && it.owner.dispatchReceiverParameter?.type == System.irType
+                            && it.owner.valueParameters[0].type.isSubtypeOfClass(Component.irType.classOrNull!!)
+                            && it.owner.dispatchReceiverParameter?.type == irType
+                            && it.owner.extensionReceiverParameter == null
                 },
-            // wrapper += component
+            // singleton += component
             MetaData.context.referenceFunctions(FqName("$classFqName.plusAssign"))
                 .filter {
                     it.owner.valueParameters.size == 1
                             && it.owner.typeParameters.isEmpty()
-                            && it.owner.valueParameters[0].type.isSubtypeOfClass(Component.irType!!.classOrNull!!)
-                            && it.owner.extensionReceiverParameter?.type == irType
-                            && it.owner.dispatchReceiverParameter?.type == System.irType
+                            && it.owner.valueParameters[0].type.isSubtypeOfClass(Component.irType.classOrNull!!)
+                            && it.owner.dispatchReceiverParameter?.type == irType
+                            && it.owner.extensionReceiverParameter == null
                 }
         )
             .flatten()
@@ -183,26 +189,26 @@ object EntityWrapper : Reference {
     private fun getAddPoolableComponentFunctions(fakeOverrideInClass: IrClass): List<IrSimpleFunction> {
         val classFqName = fakeOverrideInClass.kotlinFqName.asString()
         return listOf(
-            // wrapper.addComponent<T>()
+            // addComponent<T>()
             MetaData.context.referenceFunctions(FqName("$classFqName.addComponent"))
                 .filter {
                     it.owner.valueParameters.isEmpty()
                             && it.owner.typeParameters.size == 1
-                            //&& it.owner.typeParameters[0].defaultType.isSubtypeOfClass(Component.irType.classOrNull!!)
-                            //&& it.owner.typeParameters[0].defaultType.isSubtypeOfClass(Poolable.irType.classOrNull!!)
-                            && it.owner.extensionReceiverParameter?.type == irType
-                            && it.owner.dispatchReceiverParameter?.type == System.irType
+                            && it.owner.typeParameters[0].defaultType.isSubtypeOfClass(Component.irType.classOrNull!!)
+                            && it.owner.typeParameters[0].defaultType.isSubtypeOfClass(Poolable.irType.classOrNull!!)
+                            && it.owner.dispatchReceiverParameter?.type == irType
+                            && it.owner.extensionReceiverParameter == null
                 },
-            // wrapper.addComponent<T> { ... }
+            // addComponent<T> { ... }
             MetaData.context.referenceFunctions(FqName("$classFqName.addComponent"))
                 .filter {
                     it.owner.valueParameters.size == 1
                             && it.owner.valueParameters[0].type.isFunction()
                             && it.owner.typeParameters.size == 1
-                            && it.owner.typeParameters[0].defaultType.isSubtypeOfClass(Component.irType!!.classOrNull!!)
-                            && it.owner.typeParameters[0].defaultType.isSubtypeOfClass(Poolable.irType!!.classOrNull!!)
-                            && it.owner.extensionReceiverParameter?.type == irType
-                            && it.owner.dispatchReceiverParameter?.type == System.irType
+                            && it.owner.typeParameters[0].defaultType.isSubtypeOfClass(Component.irType.classOrNull!!)
+                            && it.owner.typeParameters[0].defaultType.isSubtypeOfClass(Poolable.irType.classOrNull!!)
+                            && it.owner.dispatchReceiverParameter?.type == irType
+                            && it.owner.extensionReceiverParameter == null
                 }
         )
             .flatten()
@@ -218,7 +224,7 @@ object EntityWrapper : Reference {
         }
     }
 
-    val getEntityIdProperty by lazy {
-        MetaData.context.referenceProperties(FqName("com.rdude.exECS.entity.EntityWrapper.entityID")).single()
+    val entityIdProperty by lazy {
+        MetaData.context.referenceProperties(FqName("com.rdude.exECS.entity.SingletonEntity.entityID")).single()
     }
 }

@@ -83,6 +83,11 @@ class CustomDumper {
             }
         }
 
+        // receivers
+        entry.dispatchReceiver?.let { updatedDump = "$updatedDump dispatchReceiver: ${entry.dispatchReceiver?.type?.classFqName?.asString()}" }
+        entry.extensionReciver?.let { updatedDump = "$updatedDump extensionReceiver: ${entry.extensionReciver?.type?.classFqName?.asString()}" }
+
+
         // return type
         entry.returnType?.let { updatedDump = "$updatedDump returnType: ${entry.returnType?.classFqName?.asString()}" }
 

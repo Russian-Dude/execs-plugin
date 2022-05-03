@@ -2,15 +2,18 @@ package com.rdude.exECS.plugin.ir.lowering
 
 import com.rdude.exECS.plugin.ir.transform.ComponentIdPropertyOverriderTransformer
 import com.rdude.exECS.plugin.ir.utils.MetaData
-import com.rdude.exECS.plugin.ir.utils.createCompanionObject
 import com.rdude.exECS.plugin.ir.utils.createAndAddPropertyWithBackingField
+import com.rdude.exECS.plugin.ir.utils.createCompanionObject
 import com.rdude.exECS.plugin.ir.utils.createPropertyWithBackingField
 import com.rdude.exECS.plugin.ir.utils.reference.Component
 import com.rdude.exECS.plugin.ir.utils.reference.IdFactory
 import org.jetbrains.kotlin.backend.common.lower.DeclarationIrBuilder
-import org.jetbrains.kotlin.ir.builders.*
+import org.jetbrains.kotlin.ir.builders.irCall
+import org.jetbrains.kotlin.ir.builders.irCallConstructor
+import org.jetbrains.kotlin.ir.builders.irExprBody
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrProperty
+import org.jetbrains.kotlin.ir.util.isEnumClass
 
 class GeneratedComponentIdPropertyAdder(private val existingCompanions: MutableMap<IrClass, IrClass>) {
 
@@ -18,9 +21,14 @@ class GeneratedComponentIdPropertyAdder(private val existingCompanions: MutableM
 
     fun addTo(irClasses: Collection<IrClass>) {
         for (cl in irClasses) {
-            val companion = existingCompanions.getOrPut(cl) { cl.createCompanionObject() }
-            val idFactoryProperty = addIdFactoryPropertyTo(companion)
-            propertyTransformer.transformTo(createIdProperty(idFactoryProperty, companion, cl), cl)
+            if (cl.isEnumClass) {
+                propertyTransformer.transformTo(createIdPropertyInEnum(cl), cl)
+            }
+            else {
+                val companion = existingCompanions.getOrPut(cl) { cl.createCompanionObject() }
+                val idFactoryProperty = addIdFactoryPropertyTo(companion)
+                propertyTransformer.transformTo(createIdProperty(idFactoryProperty, cl), cl)
+            }
         }
     }
 
@@ -38,8 +46,18 @@ class GeneratedComponentIdPropertyAdder(private val existingCompanions: MutableM
         )
     }
 
+    private fun createIdPropertyInEnum(inClass: IrClass): IrProperty {
+        return createPropertyWithBackingField(
+            inClass = inClass,
+            name = "componentId",
+            type = MetaData.context.irBuiltIns.intType,
+            isVar = false,
+            isFinal = false,
+            overridden = listOf(Component.getIdProperty)
+        )
+    }
 
-    private fun createIdProperty(idFactoryProperty: IrProperty, companion: IrClass, inClass: IrClass): IrProperty {
+    private fun createIdProperty(idFactoryProperty: IrProperty, inClass: IrClass): IrProperty {
         val builder =
             DeclarationIrBuilder(MetaData.context, inClass.symbol, inClass.startOffset, inClass.endOffset)
 
@@ -54,7 +72,6 @@ class GeneratedComponentIdPropertyAdder(private val existingCompanions: MutableM
             type = MetaData.context.irBuiltIns.intType,
             isVar = false,
             isFinal = false,
-            isLateInit = false,
             overridden = listOf(Component.getIdProperty),
             initializer = builder.irExprBody(obtainCall)
         )

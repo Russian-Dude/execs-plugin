@@ -1,10 +1,11 @@
 package com.rdude.exECS.plugin.ir
 
+import com.rdude.exECS.plugin.ir.debug.DebugVisitor
 import com.rdude.exECS.plugin.ir.lowering.GeneratedComponentIdPropertyAdder
 import com.rdude.exECS.plugin.ir.lowering.GeneratedComponentInsideEntitiesPropertyAdder
 import com.rdude.exECS.plugin.ir.lowering.GeneratedPoolAdder
 import com.rdude.exECS.plugin.ir.lowering.GeneratedTypeIdCompanionAndAccessFunctionAdder
-import com.rdude.exECS.plugin.ir.transform.EntityWrapperToComponentMapperCallsTransformer
+import com.rdude.exECS.plugin.ir.transform.EntityCallsToComponentMapperCallsTransformer
 import com.rdude.exECS.plugin.ir.transform.FromPoolCallsTransformer
 import com.rdude.exECS.plugin.ir.transform.QueueEventTransformer
 import com.rdude.exECS.plugin.ir.utils.MetaData
@@ -30,13 +31,22 @@ class ExEcsIrPluginExtension() : IrGenerationExtension {
         val systemFqName = "com.rdude.exECS.system.System"
         val eventFqName = "com.rdude.exECS.event.Event"
         val poolableFqName = "com.rdude.exECS.pool.Poolable"
+        val singletonEntityFqName = "com.rdude.exECS.entity.SingletonEntity"
 
 
         // classes plugin is interested in
         val classes: MutableMap<String, MutableList<IrClass>> = HashMap()
 
-        // find subtypes of System, Component, Event and Poolable
-        val classesFinder = ClassesFinder(listOf(componentFqName, systemFqName, eventFqName, poolableFqName))
+        // find subtypes of System, Component, Event, Poolable and Singleton Entity
+        val classesFinder = ClassesFinder(
+            listOf(
+                componentFqName,
+                systemFqName,
+                eventFqName,
+                poolableFqName,
+                singletonEntityFqName
+            )
+        )
         moduleFragment.accept(classesFinder, classes)
 
         // find existing companion objects of classes that plugin is interested in
@@ -50,7 +60,7 @@ class ExEcsIrPluginExtension() : IrGenerationExtension {
             generatedPoolAdder.addTo(classes[poolableFqName]!!)
         }
 
-        // find and transform calls to EntityWrapper methods inside system subclasses
+        // find and transform calls to Entity methods inside system subclasses
         if (classes[systemFqName]?.isNotEmpty() == true) {
 
             // methods to transform
@@ -59,7 +69,13 @@ class ExEcsIrPluginExtension() : IrGenerationExtension {
                 EntityWrapper.hasComponentFun,
                 EntityWrapper.removeComponentFun,
                 EntityWrapper.addComponentFun,
-                EntityWrapper.addPoolableComponentFun)
+                EntityWrapper.addPoolableComponentFun,
+                SingletonEntity.getComponentFun,
+                SingletonEntity.hasComponentFun,
+                SingletonEntity.removeComponentFun,
+                SingletonEntity.addComponentFun,
+                SingletonEntity.addPoolableComponentFun
+            )
 
             // find
             val entityWrapperMethodCallsData = callsFinder.find(
@@ -69,8 +85,32 @@ class ExEcsIrPluginExtension() : IrGenerationExtension {
             )
 
             // transform
-            val entityWrapperToComponentMapperCallsTransformer = EntityWrapperToComponentMapperCallsTransformer(pools)
+            val entityWrapperToComponentMapperCallsTransformer = EntityCallsToComponentMapperCallsTransformer(pools)
             entityWrapperMethodCallsData.forEach { entityWrapperToComponentMapperCallsTransformer.transform(it) }
+        }
+
+        // find and transform calls to SingletonEntity methods inside SingletonEntity subclasses
+        if (classes[singletonEntityFqName]?.isNotEmpty() == true) {
+
+            // methods to transform
+            val singletonEntitiesTransformMethods = listOf(
+                SingletonEntity.getComponentFun,
+                SingletonEntity.hasComponentFun,
+                SingletonEntity.removeComponentFun,
+                SingletonEntity.addComponentFun,
+                SingletonEntity.addPoolableComponentFun
+            )
+
+            // find
+            val singletonEntitiesCallsData = callsFinder.find(
+                moduleFragment = moduleFragment,
+                representations = singletonEntitiesTransformMethods,
+                inClasses = classes[singletonEntityFqName]!!
+            )
+
+            // transform
+            val entityToComponentMapperCallsTransformer = EntityCallsToComponentMapperCallsTransformer(pools)
+            singletonEntitiesCallsData.forEach { entityToComponentMapperCallsTransformer.transform(it) }
         }
 
         // find and transform fromPool() calls
@@ -104,7 +144,8 @@ class ExEcsIrPluginExtension() : IrGenerationExtension {
         }
 
         // transform queueEvent
-        val queueEventCalls = callsFinder.find(moduleFragment, listOf(System.queuePoolableEventFun, World.queuePoolableEventFun))
+        val queueEventCalls =
+            callsFinder.find(moduleFragment, listOf(System.queuePoolableEventFun, World.queuePoolableEventFun))
         if (queueEventCalls.isNotEmpty()) {
             val queueEventTransformer = QueueEventTransformer(pools)
             queueEventCalls.forEach { queueEventTransformer.transform(it) }
@@ -112,6 +153,6 @@ class ExEcsIrPluginExtension() : IrGenerationExtension {
 
 
         // debug
-        //moduleFragment.accept(DebugVisitor(), null)
+        moduleFragment.accept(DebugVisitor(), null)
     }
 }

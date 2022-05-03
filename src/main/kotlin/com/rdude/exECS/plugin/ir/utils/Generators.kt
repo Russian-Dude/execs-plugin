@@ -2,6 +2,7 @@ package com.rdude.exECS.plugin.ir.utils
 
 import org.jetbrains.kotlin.backend.common.ir.addChild
 import org.jetbrains.kotlin.backend.common.ir.copyTo
+import org.jetbrains.kotlin.backend.common.ir.createImplicitParameterDeclarationWithWrappedDescriptor
 import org.jetbrains.kotlin.backend.common.lower.DeclarationIrBuilder
 import org.jetbrains.kotlin.backend.common.lower.irBlockBody
 import org.jetbrains.kotlin.descriptors.ClassKind
@@ -21,6 +22,7 @@ import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.impl.IrSimpleTypeImpl
 import org.jetbrains.kotlin.ir.util.constructors
 import org.jetbrains.kotlin.ir.util.defaultType
+import org.jetbrains.kotlin.ir.util.properties
 import org.jetbrains.kotlin.name.Name
 
 fun createPropertyWithBackingField(
@@ -33,14 +35,16 @@ fun createPropertyWithBackingField(
     overridden: List<IrPropertySymbol>? = null,
     initializer: IrExpressionBody? = null
 ): IrProperty {
-    val property = MetaData.context.irFactory.buildProperty {
-        this.startOffset = inClass.startOffset
-        this.endOffset = inClass.endOffset
-        this.name = Name.identifier(name)
-        this.isVar = isVar
-        this.isLateinit = isLateInit
-        this.visibility = DescriptorVisibilities.PUBLIC
-    }
+
+    val property = inClass.properties.firstOrNull { it.name.asString() == name && !it.isFakeOverride }
+        ?: MetaData.context.irFactory.buildProperty {
+            this.startOffset = inClass.startOffset
+            this.endOffset = inClass.endOffset
+            this.name = Name.identifier(name)
+            this.isVar = isVar
+            this.isLateinit = isLateInit
+            this.visibility = DescriptorVisibilities.PUBLIC
+        }
 
     val field = MetaData.context.irFactory.buildField {
         this.startOffset = inClass.startOffset
@@ -53,26 +57,24 @@ fun createPropertyWithBackingField(
 
     val declarationIrBuilder = DeclarationIrBuilder(MetaData.context, field.symbol)
 
-    val getterFun = IR_FACTORY.buildFun {
+    val getterFun = property.getter ?: IR_FACTORY.buildFun {
         this.startOffset = inClass.startOffset
         this.endOffset = inClass.endOffset
         this.name = Name.special("<get-$name>")
         this.returnType = type
         this.origin = IrDeclarationOrigin.DEFAULT_PROPERTY_ACCESSOR
-    }.also { function ->
-        function.dispatchReceiverParameter = inClass.thisReceiver!!.copyTo(function)
+    }
 
-        overridden?.let { function.overriddenSymbols = listOf(it.first().owner.getter!!.symbol) }
-
-        function.correspondingPropertySymbol = property.symbol
-        function.body = DeclarationIrBuilder(MetaData.context, function.symbol).irBlockBody {
-            +this.irReturn(
-                declarationIrBuilder.irGetField(
-                    this.irGet(function.dispatchReceiverParameter!!),
-                    field
-                )
+    getterFun.dispatchReceiverParameter = inClass.thisReceiver!!.copyTo(getterFun)
+    overridden?.let { getterFun.overriddenSymbols = listOf(it.first().owner.getter!!.symbol) }
+    getterFun.correspondingPropertySymbol = property.symbol
+    getterFun.body = DeclarationIrBuilder(MetaData.context, getterFun.symbol).irBlockBody {
+        +this.irReturn(
+            declarationIrBuilder.irGetField(
+                this.irGet(getterFun.dispatchReceiverParameter!!),
+                field
             )
-        }
+        )
     }
 
     if (isVar) {
@@ -129,7 +131,6 @@ fun createPropertyWithBackingField(
 }
 
 
-
 fun IrClass.createAndAddPropertyWithBackingField(
     name: String,
     type: IrType,
@@ -140,13 +141,16 @@ fun IrClass.createAndAddPropertyWithBackingField(
     initializer: IrExpressionBody? = null
 ): IrProperty {
 
+    val isDescriptorAlreadyPresent = this.properties.any { it.name.asString() == name }
+
     val property = createPropertyWithBackingField(this, name, type, isVar, isFinal, isLateInit, overridden, initializer)
 
-    this.addMember(property)
+    if (!isDescriptorAlreadyPresent) {
+        this.addMember(property)
+    }
 
     return property
 }
-
 
 
 fun IrClass.createCompanionObject(
@@ -162,6 +166,8 @@ fun IrClass.createCompanionObject(
         this.startOffset = this@createCompanionObject.startOffset
         this.endOffset = this@createCompanionObject.endOffset
     }
+
+    companion.createImplicitParameterDeclarationWithWrappedDescriptor()
 
     val receiver = buildValueParameter(companion) {
         this.name = Name.special("<this>")

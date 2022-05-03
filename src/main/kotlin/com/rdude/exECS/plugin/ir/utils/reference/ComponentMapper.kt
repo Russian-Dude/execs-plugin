@@ -10,7 +10,9 @@ import org.jetbrains.kotlin.name.FqName
 
 object ComponentMapper : Reference {
 
-    val irType by lazy { MetaData.context.referenceClass(FqName("com.rdude.exECS.component.ComponentMapper"))?.defaultType!! }
+    val classSymbol by lazy { MetaData.context.referenceClass(FqName("com.rdude.exECS.component.ComponentMapper"))!! }
+
+    val irType by lazy { classSymbol.defaultType }
 
     val getComponentFun by lazy {
         MetaData.context.referenceFunctions(FqName("com.rdude.exECS.component.ComponentMapper.get"))

@@ -26,7 +26,7 @@ class GeneratedPoolAdder(private val existingCompanions: MutableMap<IrClass, IrC
 
     fun addTo(irClasses: Collection<IrClass>) {
         for (cl in irClasses) {
-            if (cl.modality == Modality.ABSTRACT || cl.isInner) continue
+            if (cl.modality == Modality.ABSTRACT || cl.isInner || cl.isEnumClass) continue
             val companion = existingCompanions.getOrPut(cl) { cl.createCompanionObject() }
             val property = addPoolPropertyTo(companion, cl) ?: continue
             pools.store(cl.defaultType, property, companion)

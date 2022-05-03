@@ -49,7 +49,7 @@ publishing {
         create<MavenPublication>("maven") {
             groupId = "com.russian-dude"
             artifactId = "execs-plugin"
-            version = "1.4.0-1.0.3"
+            version = "1.4.2-1.0.0"
             from(components["java"])
         }
     }

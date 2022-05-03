@@ -153,6 +153,6 @@ class ExEcsIrPluginExtension() : IrGenerationExtension {
 
 
         // debug
-        moduleFragment.accept(DebugVisitor(), null)
+        //moduleFragment.accept(DebugVisitor(), null)
     }
 }

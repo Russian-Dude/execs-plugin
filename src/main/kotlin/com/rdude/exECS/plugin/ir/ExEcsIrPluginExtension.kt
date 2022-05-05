@@ -1,13 +1,10 @@
 package com.rdude.exECS.plugin.ir
 
-import com.rdude.exECS.plugin.ir.debug.DebugVisitor
-import com.rdude.exECS.plugin.ir.lowering.GeneratedComponentIdPropertyAdder
-import com.rdude.exECS.plugin.ir.lowering.GeneratedComponentInsideEntitiesPropertyAdder
+import com.rdude.exECS.plugin.ir.lowering.GeneratedInsideEntitiesPropertyAdder
 import com.rdude.exECS.plugin.ir.lowering.GeneratedPoolAdder
+import com.rdude.exECS.plugin.ir.lowering.GeneratedRichComponentEntityIdPropertyAdder
 import com.rdude.exECS.plugin.ir.lowering.GeneratedTypeIdCompanionAndAccessFunctionAdder
-import com.rdude.exECS.plugin.ir.transform.EntityCallsToComponentMapperCallsTransformer
-import com.rdude.exECS.plugin.ir.transform.FromPoolCallsTransformer
-import com.rdude.exECS.plugin.ir.transform.QueueEventTransformer
+import com.rdude.exECS.plugin.ir.transform.*
 import com.rdude.exECS.plugin.ir.utils.MetaData
 import com.rdude.exECS.plugin.ir.utils.reference.*
 import com.rdude.exECS.plugin.ir.visit.CallsFinder
@@ -16,6 +13,7 @@ import com.rdude.exECS.plugin.ir.visit.CompanionsFinder
 import com.rdude.exECS.plugin.ir.visit.PoolsMapper
 import org.jetbrains.kotlin.backend.common.extensions.IrGenerationExtension
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
+import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 
@@ -26,24 +24,29 @@ class ExEcsIrPluginExtension() : IrGenerationExtension {
         MetaData.context = pluginContext
 
         val callsFinder = CallsFinder()
+        val propertyTransformer = PropertyTransformer()
 
         val componentFqName = "com.rdude.exECS.component.Component"
+        val richComponentFqName = "com.rdude.exECS.component.RichComponent"
         val systemFqName = "com.rdude.exECS.system.System"
         val eventFqName = "com.rdude.exECS.event.Event"
         val poolableFqName = "com.rdude.exECS.pool.Poolable"
+        val poolableComponentFqName = "com.rdude.exECS.component.PoolableComponent"
         val singletonEntityFqName = "com.rdude.exECS.entity.SingletonEntity"
 
 
         // classes plugin is interested in
         val classes: MutableMap<String, MutableList<IrClass>> = HashMap()
 
-        // find subtypes of System, Component, Event, Poolable and Singleton Entity
+        // find subtypes of System, Component, Event, Poolable, PoolableComponent and Singleton Entity
         val classesFinder = ClassesFinder(
             listOf(
                 componentFqName,
+                richComponentFqName,
                 systemFqName,
                 eventFqName,
                 poolableFqName,
+                poolableComponentFqName,
                 singletonEntityFqName
             )
         )
@@ -52,6 +55,33 @@ class ExEcsIrPluginExtension() : IrGenerationExtension {
         // find existing companion objects of classes that plugin is interested in
         val companionsFinder = CompanionsFinder()
         val existingCompanions = companionsFinder.find(classes.values.flatten())
+
+        // add insideEntities property if needed to PoolableComponents
+        if (classes[poolableComponentFqName]?.isNotEmpty() == true || classes[componentFqName]?.isNotEmpty() == true) {
+
+            val insideEntitiesPropertyAdder = GeneratedInsideEntitiesPropertyAdder(propertyTransformer)
+
+            if (classes[poolableFqName]?.isNotEmpty() == true) {
+                classes[poolableFqName]!!.filter { it.modality != Modality.ABSTRACT }.forEach {
+                    insideEntitiesPropertyAdder.addInsideEntitiesPropertyIfNeeded(it)
+                }
+            }
+
+            // make components that implements Poolable but not PoolableComponent, implement PoolableComponent and add property
+            if (classes[componentFqName]?.isNotEmpty() == true) {
+                val toPoolableComponent = PoolableToPoolableComponentTransformer()
+                classes[componentFqName]!!.filter { it.modality != Modality.ABSTRACT }.forEach {
+                    val transformed = toPoolableComponent.transformIfNeeded(it)
+                    if (transformed) insideEntitiesPropertyAdder.addInsideEntitiesPropertyIfNeeded(it)
+                }
+            }
+        }
+
+        // override entityId property of rich components if needed
+        if (classes[richComponentFqName]?.isNotEmpty() == true) {
+            val entityIdPropertyTransformer = GeneratedRichComponentEntityIdPropertyAdder(propertyTransformer)
+            classes[richComponentFqName]!!.filter { it.modality != Modality.ABSTRACT }.forEach { entityIdPropertyTransformer.addOrTransformEntityIdPropertyIfNeeded(it) }
+        }
 
         // generate pools
         val pools = PoolsMapper()
@@ -129,18 +159,6 @@ class ExEcsIrPluginExtension() : IrGenerationExtension {
         // add companions that holds type ids to components
         if (classes[componentFqName]?.isNotEmpty() == true) {
             generatedTypeIdAdder.addTo(classes[componentFqName]!!, Component)
-        }
-
-        // add generated id to components and id factory to component's companion
-        val generatedComponentIdPropertyAdder = GeneratedComponentIdPropertyAdder(existingCompanions)
-        if (classes[componentFqName]?.isNotEmpty() == true) {
-            generatedComponentIdPropertyAdder.addTo(classes[componentFqName]!!)
-        }
-
-        // override insideEntities property in components
-        val generatedComponentInsideEntitiesPropertyAdder = GeneratedComponentInsideEntitiesPropertyAdder()
-        if (classes[componentFqName]?.isNotEmpty() == true) {
-            generatedComponentInsideEntitiesPropertyAdder.addTo(classes[componentFqName]!!)
         }
 
         // transform queueEvent

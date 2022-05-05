@@ -6,7 +6,8 @@ import org.jetbrains.kotlin.name.FqName
 
 object Component : HasId, Reference {
 
-    override val irType by lazy { MetaData.context.referenceClass(FqName("com.rdude.exECS.component.Component"))!!.defaultType }
+    val classSymbol by lazy { MetaData.context.referenceClass(FqName("com.rdude.exECS.component.Component"))!! }
+    override val irType by lazy { classSymbol.defaultType }
 
     override val getTypeIdFun by lazy {
         MetaData.context.referenceFunctions(FqName("com.rdude.exECS.component.Component.getComponentTypeId"))

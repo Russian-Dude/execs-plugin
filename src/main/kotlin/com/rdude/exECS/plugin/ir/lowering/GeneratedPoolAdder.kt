@@ -103,7 +103,7 @@ class GeneratedPoolAdder(private val existingCompanions: MutableMap<IrClass, IrC
         val supplierExpression = IrFunctionExpressionImpl(
             startOffset = inClass.startOffset,
             endOffset = inClass.endOffset,
-            type = MetaData.context.irBuiltIns.function(0).typeWith(inClass.defaultType),
+            type = MetaData.context.irBuiltIns.functionN(0).typeWith(inClass.defaultType),
             function = function,
             origin = IrStatementOrigin.LAMBDA
         )

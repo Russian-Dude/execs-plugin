@@ -1,13 +1,13 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    kotlin("jvm") version "1.5.31"
+    kotlin("jvm") version "1.6.0"
     id("maven-publish")
     `java-gradle-plugin`
 }
 
 group = "com.russian-dude"
-version = "1.4.4-1.0.0"
+version = "1.4.4-1.0.1"
 
 repositories {
     mavenCentral()
@@ -16,9 +16,9 @@ repositories {
 dependencies {
     implementation("org.junit.jupiter:junit-jupiter:5.7.0")
     testImplementation(kotlin("test"))
-    compileOnly("org.jetbrains.kotlin:kotlin-stdlib:1.5.31")
-    implementation("org.jetbrains.kotlin:kotlin-gradle-plugin:1.5.31")
-    compileOnly("org.jetbrains.kotlin:kotlin-compiler-embeddable:1.5.31")
+    compileOnly("org.jetbrains.kotlin:kotlin-stdlib:1.6.0")
+    implementation("org.jetbrains.kotlin:kotlin-gradle-plugin:1.6.0")
+    compileOnly("org.jetbrains.kotlin:kotlin-compiler-embeddable:1.6.0")
 }
 
 tasks.test {
@@ -49,7 +49,7 @@ publishing {
         create<MavenPublication>("maven") {
             groupId = "com.russian-dude"
             artifactId = "execs-plugin"
-            version = "1.4.4-1.0.0"
+            version = "1.4.4-1.0.1"
             from(components["java"])
         }
     }

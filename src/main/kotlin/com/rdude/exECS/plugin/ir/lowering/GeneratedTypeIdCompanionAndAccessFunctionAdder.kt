@@ -3,8 +3,8 @@ package com.rdude.exECS.plugin.ir.lowering
 import com.rdude.exECS.plugin.ir.transform.GetTypeIdFakeToCompanionBasedFunctionTransformer
 import com.rdude.exECS.plugin.ir.utils.IR_FACTORY
 import com.rdude.exECS.plugin.ir.utils.MetaData
-import com.rdude.exECS.plugin.ir.utils.createCompanionObject
 import com.rdude.exECS.plugin.ir.utils.createAndAddPropertyWithBackingField
+import com.rdude.exECS.plugin.ir.utils.createCompanionObject
 import com.rdude.exECS.plugin.ir.utils.reference.HasId
 import org.jetbrains.kotlin.backend.common.ir.copyTo
 import org.jetbrains.kotlin.backend.common.lower.DeclarationIrBuilder
@@ -13,7 +13,7 @@ import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.ir.builders.declarations.buildFun
 import org.jetbrains.kotlin.ir.builders.irBlockBody
 import org.jetbrains.kotlin.ir.builders.irCall
-import org.jetbrains.kotlin.ir.builders.irGet
+import org.jetbrains.kotlin.ir.builders.irGetObject
 import org.jetbrains.kotlin.ir.builders.irReturn
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrProperty
@@ -58,7 +58,7 @@ class GeneratedTypeIdCompanionAndAccessFunctionAdder(private val existingCompani
         val builder = DeclarationIrBuilder(MetaData.context, function.symbol, function.startOffset, function.endOffset)
 
         val getIdCall = builder.irCall(idProperty.getter!!)
-        getIdCall.dispatchReceiver = builder.irGet(companion.thisReceiver!!)
+        getIdCall.dispatchReceiver = builder.irGetObject(companion.symbol)
         getIdCall.type = MetaData.context.irBuiltIns.intType
         function.parent = irClass
 

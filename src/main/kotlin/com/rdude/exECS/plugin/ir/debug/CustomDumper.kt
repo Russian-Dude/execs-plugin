@@ -91,6 +91,9 @@ class CustomDumper {
         // return type
         entry.returnType?.let { updatedDump = "$updatedDump returnType: ${entry.returnType?.classFqName?.asString()}" }
 
+        // super qualifier symbol
+        entry.superQualifierSymbol?.let { updatedDump = "$updatedDump superQualifierSymbol: ${entry.superQualifierSymbol}" }
+
         entry.children.forEach {
             updatedDump = visit(it, updatedDump, layer + 1)
         }

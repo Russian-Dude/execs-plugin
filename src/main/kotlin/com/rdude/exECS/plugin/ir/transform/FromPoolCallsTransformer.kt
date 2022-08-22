@@ -1,8 +1,8 @@
 package com.rdude.exECS.plugin.ir.transform
 
+import com.rdude.exECS.plugin.describer.Kotlin
+import com.rdude.exECS.plugin.describer.Pool
 import com.rdude.exECS.plugin.ir.utils.builderOf
-import com.rdude.exECS.plugin.ir.utils.reference.Kotlin
-import com.rdude.exECS.plugin.ir.utils.reference.Pool
 import com.rdude.exECS.plugin.ir.visit.CallsFinder
 import com.rdude.exECS.plugin.ir.visit.PoolsMapper
 import org.jetbrains.kotlin.backend.common.IrElementTransformerVoidWithContext
@@ -33,26 +33,31 @@ class FromPoolCallsTransformer(private val poolsMapper: PoolsMapper) : IrElement
         val builder = builderOf(poolPropertyInfo.property)
 
         val getPoolCall = builder.irCall(poolPropertyInfo.property.getter!!)
-        getPoolCall.dispatchReceiver = builder.irGetObject(poolPropertyInfo.companion.symbol)
+            .apply {
+                dispatchReceiver = builder.irGetObject(poolPropertyInfo.companion.symbol)
+                this.type = Pool.irTypeWith(type)
+            }
 
-        val obtainFun = builder.irCall(Pool.obtainFun)
-        obtainFun.dispatchReceiver = getPoolCall
-        obtainFun.type = expression.type
+        val obtainCall = builder.irCall(Pool.obtainFun.single())
+            .apply {
+                this.dispatchReceiver = getPoolCall
+                this.type = expression.type
+            }
 
         val resultCall =
             // fromPool<T>()
             if (expression.valueArgumentsCount == 0) {
-                obtainFun
+                obtainCall
             }
             // fromPool(T::class)
             else if (expression.valueArgumentsCount == 1 && expression.getValueArgument(0)!!.type.isKClass()) {
-                obtainFun
+                obtainCall
             }
             // fromPool<T> { ... }
             else if (expression.valueArgumentsCount == 1 && expression.getValueArgument(0)!!.type.isFunction()) {
                 val applyFunction = expression.getValueArgument(0)
-                val applyCall = builder.irCall(Kotlin.applyFun)
-                applyCall.extensionReceiver = obtainFun
+                val applyCall = builder.irCall(Kotlin.applyFun.single())
+                applyCall.extensionReceiver = obtainCall
                 applyCall.putValueArgument(0, applyFunction)
                 applyCall.putTypeArgument(0, type)
                 applyCall
@@ -63,17 +68,13 @@ class FromPoolCallsTransformer(private val poolsMapper: PoolsMapper) : IrElement
                 && expression.getValueArgument(1)!!.type.isFunction()
             ) {
                 val applyFunction = expression.getValueArgument(1)
-                val applyCall = builder.irCall(Kotlin.applyFun)
-                applyCall.extensionReceiver = obtainFun
+                val applyCall = builder.irCall(Kotlin.applyFun.single())
+                applyCall.extensionReceiver = obtainCall
                 applyCall.putValueArgument(0, applyFunction)
                 applyCall.putTypeArgument(0, type)
                 applyCall
             }
             else throw IllegalStateException("Can not transform fromPool call")
-
-/*        val resultCall = builder.irCall(Pool.obtainFun)
-        resultCall.dispatchReceiver = getPoolCall
-        resultCall.type = expression.type*/
 
         return resultCall
     }

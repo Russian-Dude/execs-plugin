@@ -1,6 +1,8 @@
 package com.rdude.exECS.plugin.ir.visit
 
-import com.rdude.exECS.plugin.ir.utils.*
+import com.rdude.exECS.plugin.describer.MethodDescriber
+import com.rdude.exECS.plugin.ir.utils.isCallTo
+import com.rdude.exECS.plugin.ir.utils.merge
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrDeclaration
@@ -18,23 +20,23 @@ class CallsFinder {
 
     fun find(
         moduleFragment: IrModuleFragment,
-        representations: Collection<Representation<IrCall>>,
+        representations: Collection<MethodDescriber>,
         inClasses: Collection<IrClass> = mutableSetOf<IrClass>().apply { moduleFragment.accept(classesVisitor, this) }
     ): List<CallData> {
-        callsVisitor.lookingForRepresentations = representations
+        callsVisitor.lookingForMethods = representations
         val result = mutableListOf<CallData>()
         for (cl in inClasses) {
             callsVisitor.currentClass = cl
             val functions = mutableListOf<IrFunction>()
             cl.accept(functionsVisitor, functions)
             for (function in functions) {
-                val calls = mutableMapOf<Representation<IrCall>, MutableList<IrCall>>()
+                val calls = mutableMapOf<MethodDescriber, MutableList<IrCall>>()
                 function.accept(callsVisitor, calls)
                 if (calls.isEmpty()) continue
                 val classFunction: IrFunction = findClassFunction(function, cl) ?: continue
-                for ((representation, set) in calls) {
+                for ((methodDescriber, set) in calls) {
                     set.forEach { call ->
-                        result += CallData(call, cl, function, classFunction, representation)
+                        result += CallData(call, cl, function, classFunction, methodDescriber)
                     }
                 }
             }
@@ -55,33 +57,24 @@ class CallsFinder {
         val insideClass: IrClass,
         val insideFunction: IrFunction,
         val insideClassFunction: IrFunction,
-        val representationOf: Representation<IrCall>
+        val methodDescriber: MethodDescriber
     )
 
 
-    private inner class CallsVisitor : IrElementVisitor<Unit, MutableMap<Representation<IrCall>, MutableList<IrCall>>> {
+    private inner class CallsVisitor : IrElementVisitor<Unit, MutableMap<MethodDescriber, MutableList<IrCall>>> {
 
-        lateinit var lookingForRepresentations: Collection<Representation<IrCall>>
+        lateinit var lookingForMethods: Collection<MethodDescriber>
         lateinit var currentClass: IrClass
 
-        override fun visitElement(element: IrElement, data: MutableMap<Representation<IrCall>, MutableList<IrCall>>) {
+        override fun visitElement(element: IrElement, data: MutableMap<MethodDescriber, MutableList<IrCall>>) {
             element.acceptChildren(this, data)
         }
 
-        override fun visitCall(expression: IrCall, data: MutableMap<Representation<IrCall>, MutableList<IrCall>>) {
+        override fun visitCall(expression: IrCall, data: MutableMap<MethodDescriber, MutableList<IrCall>>) {
             super.visitCall(expression, data)
-            lookingForRepresentations.forEach {
-                if (it is SimpleRepresentation<IrCall>) {
-                    if (expression represents it) {
-                        data.merge(it, expression)
-                    }
-                } else if (it is FakeOverrideFunctionRepresentation
-                    && expression.dispatchReceiver != null
-                    && expression.dispatchReceiver!!.type.getClass() != null
-                ) {
-                    if (expression.represents(it, expression.dispatchReceiver!!.type.getClass()!!)) {
-                        data.merge(it, expression)
-                    }
+            lookingForMethods.forEach {
+                if (expression.isCallTo(it)) {
+                    data.merge(it, expression)
                 }
             }
         }

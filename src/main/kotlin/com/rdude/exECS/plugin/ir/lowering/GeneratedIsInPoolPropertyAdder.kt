@@ -1,29 +1,31 @@
 package com.rdude.exECS.plugin.ir.lowering
 
 import com.rdude.exECS.plugin.describer.Kotlin
-import com.rdude.exECS.plugin.describer.PoolableComponent
+import com.rdude.exECS.plugin.describer.Poolable
 import com.rdude.exECS.plugin.ir.utils.MetaData
 import com.rdude.exECS.plugin.ir.utils.createAndAddPropertyWithBackingField
 import org.jetbrains.kotlin.backend.common.lower.DeclarationIrBuilder
+import org.jetbrains.kotlin.ir.builders.irBoolean
 import org.jetbrains.kotlin.ir.builders.irExprBody
-import org.jetbrains.kotlin.ir.builders.irInt
 import org.jetbrains.kotlin.ir.declarations.IrClass
 
-class GeneratedInsideEntitiesPropertyAdder {
+class GeneratedIsInPoolPropertyAdder {
 
-    fun addInsideEntitiesPropertyIfNeeded(irClass: IrClass) {
+    fun addOrTransformIsInPoolPropertyIfNeeded(irClass: IrClass) {
 
         val builder = DeclarationIrBuilder(MetaData.context, irClass.symbol, irClass.startOffset, irClass.endOffset)
 
         irClass.createAndAddPropertyWithBackingField(
-            name = PoolableComponent.insideEntitiesProperty.owner.name.asString(),
-            type = MetaData.context.irBuiltIns.intType,
+            name = Poolable.isInPoolProperty.owner.name.asString(),
+            type = MetaData.context.irBuiltIns.booleanType,
             isVar = true,
             isFinal = false,
             isLateInit = false,
-            overridden = listOf(PoolableComponent.insideEntitiesProperty),
-            initializer = builder.irExprBody(builder.irInt(0)),
-            annotations = listOf(Kotlin.TransientAnnotation.constructorCall())
+            overridden = listOf(Poolable.isInPoolProperty),
+            initializer = builder.irExprBody(builder.irBoolean(false)),
+            annotations = listOf(
+                Kotlin.TransientAnnotation.constructorCall()
+            )
         )
     }
 

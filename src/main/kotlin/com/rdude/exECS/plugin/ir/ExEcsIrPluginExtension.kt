@@ -1,12 +1,11 @@
 package com.rdude.exECS.plugin.ir
 
-import com.rdude.exECS.plugin.ir.lowering.GeneratedInsideEntitiesPropertyAdder
-import com.rdude.exECS.plugin.ir.lowering.GeneratedPoolAdder
-import com.rdude.exECS.plugin.ir.lowering.GeneratedRichComponentEntityIdPropertyAdder
-import com.rdude.exECS.plugin.ir.lowering.GeneratedTypeIdCompanionAndAccessFunctionAdder
+import com.rdude.exECS.plugin.describer.*
+import com.rdude.exECS.plugin.ir.check.MainCorrectnessChecker
+import com.rdude.exECS.plugin.ir.debug.DebugVisitor
+import com.rdude.exECS.plugin.ir.lowering.*
 import com.rdude.exECS.plugin.ir.transform.*
 import com.rdude.exECS.plugin.ir.utils.MetaData
-import com.rdude.exECS.plugin.ir.utils.reference.*
 import com.rdude.exECS.plugin.ir.visit.CallsFinder
 import com.rdude.exECS.plugin.ir.visit.ClassesFinder
 import com.rdude.exECS.plugin.ir.visit.CompanionsFinder
@@ -16,8 +15,9 @@ import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
+import org.jetbrains.kotlin.ir.types.IrType
 
-class ExEcsIrPluginExtension() : IrGenerationExtension {
+class ExEcsIrPluginExtension : IrGenerationExtension {
 
     override fun generate(moduleFragment: IrModuleFragment, pluginContext: IrPluginContext) {
 
@@ -26,121 +26,121 @@ class ExEcsIrPluginExtension() : IrGenerationExtension {
         val callsFinder = CallsFinder()
         val propertyTransformer = PropertyTransformer()
 
-        val componentFqName = "com.rdude.exECS.component.Component"
-        val richComponentFqName = "com.rdude.exECS.component.RichComponent"
-        val systemFqName = "com.rdude.exECS.system.System"
-        val eventFqName = "com.rdude.exECS.event.Event"
-        val poolableFqName = "com.rdude.exECS.pool.Poolable"
-        val poolableComponentFqName = "com.rdude.exECS.component.PoolableComponent"
-        val singletonEntityFqName = "com.rdude.exECS.entity.SingletonEntity"
-
-
         // classes plugin is interested in
-        val classes: MutableMap<String, MutableList<IrClass>> = HashMap()
+        val classes: MutableMap<ClassDescriber, MutableList<IrClass>> = HashMap()
 
-        // find subtypes of System, Component, Event, Poolable, PoolableComponent and Singleton Entity
+        // find subtypes of exECS classes
         val classesFinder = ClassesFinder(
             listOf(
-                componentFqName,
-                richComponentFqName,
-                systemFqName,
-                eventFqName,
-                poolableFqName,
-                poolableComponentFqName,
-                singletonEntityFqName
+                Component,
+                UniqueComponent,
+                RichComponent,
+                ObservableComponent,
+                System,
+                Event,
+                Poolable,
+                PoolableComponent,
+                SingletonEntity,
+                WorldAccessor
             )
         )
         moduleFragment.accept(classesFinder, classes)
 
+        // Check correctness
+        MainCorrectnessChecker().checkAndThrowIfNotCorrect(classes)
+
         // find existing companion objects of classes that plugin is interested in
         val companionsFinder = CompanionsFinder()
         val existingCompanions = companionsFinder.find(classes.values.flatten())
+        val existingTypeIdProperties = mutableMapOf<IrType, MutableMap<ClassDescriber, TypeIdProperty>>()
 
         // add insideEntities property if needed to PoolableComponents
-        if (classes[poolableComponentFqName]?.isNotEmpty() == true || classes[componentFqName]?.isNotEmpty() == true) {
+        if (classes[PoolableComponent]?.isNotEmpty() == true || classes[Component]?.isNotEmpty() == true) {
 
-            val insideEntitiesPropertyAdder = GeneratedInsideEntitiesPropertyAdder(propertyTransformer)
+            val insideEntitiesPropertyAdder = GeneratedInsideEntitiesPropertyAdder()
 
-            if (classes[poolableFqName]?.isNotEmpty() == true) {
-                classes[poolableFqName]!!.filter { it.modality != Modality.ABSTRACT }.forEach {
+            if (classes[PoolableComponent]?.isNotEmpty() == true) {
+                classes[PoolableComponent]!!.filter { it.modality != Modality.ABSTRACT }.forEach {
                     insideEntitiesPropertyAdder.addInsideEntitiesPropertyIfNeeded(it)
                 }
             }
 
             // make components that implements Poolable but not PoolableComponent, implement PoolableComponent and add property
-            if (classes[componentFqName]?.isNotEmpty() == true) {
+            if (classes[Component]?.isNotEmpty() == true) {
                 val toPoolableComponent = PoolableToPoolableComponentTransformer()
-                classes[componentFqName]!!.filter { it.modality != Modality.ABSTRACT }.forEach {
+                classes[Component]!!.filter { it.modality != Modality.ABSTRACT }.forEach {
                     val transformed = toPoolableComponent.transformIfNeeded(it)
                     if (transformed) insideEntitiesPropertyAdder.addInsideEntitiesPropertyIfNeeded(it)
                 }
             }
         }
 
-        // override entityId property of rich components if needed
-        if (classes[richComponentFqName]?.isNotEmpty() == true) {
-            val entityIdPropertyTransformer = GeneratedRichComponentEntityIdPropertyAdder(propertyTransformer)
-            classes[richComponentFqName]!!.filter { it.modality != Modality.ABSTRACT }.forEach { entityIdPropertyTransformer.addOrTransformEntityIdPropertyIfNeeded(it) }
+        // override entityId property of unique components if needed
+        if (classes[UniqueComponent]?.isNotEmpty() == true) {
+            val entityIdPropertyTransformer = GeneratedUniqueComponentEntityIdPropertyAdder()
+            classes[UniqueComponent]!!.filter { it.modality != Modality.ABSTRACT }.forEach { entityIdPropertyTransformer.addOrTransformEntityIdPropertyIfNeeded(it) }
+        }
+
+        // override entitiesIds property of rich components if needed
+        if (classes[RichComponent]?.isNotEmpty() == true) {
+            val entitiesIdsPropertyTransformer = GeneratedRichComponentEntitiesIdsPropertyAdder()
+            classes[RichComponent]!!.filter { it.modality != Modality.ABSTRACT }.forEach { entitiesIdsPropertyTransformer.addOrTransformEntityIdsPropertyIfNeeded(it) }
+        }
+
+        // override world property of observable components if needed
+        if (classes[ObservableComponent]?.isNotEmpty() == true) {
+            val worldPropertyTransformer = GeneratedObservableComponentWorldPropertyAdder()
+            classes[ObservableComponent]!!.filter { it.modality != Modality.ABSTRACT }.forEach { worldPropertyTransformer.addOrTransformWorldPropertyIfNeeded(it) }
+        }
+
+        // override pool property of poolables if needed
+        if (classes[Poolable]?.isNotEmpty() == true) {
+            val poolPropertyTransformer = GeneratedPoolPropertyAdder()
+            classes[Poolable]!!.filter { it.modality != Modality.ABSTRACT }.forEach { poolPropertyTransformer.addOrTransformPoolPropertyIfNeeded(it) }
+        }
+
+        // override isInPool property of poolables if needed
+        if (classes[Poolable]?.isNotEmpty() == true) {
+            val isInPoolPropertyTransformer = GeneratedIsInPoolPropertyAdder()
+            classes[Poolable]!!.filter { it.modality != Modality.ABSTRACT }.forEach { isInPoolPropertyTransformer.addOrTransformIsInPoolPropertyIfNeeded(it) }
         }
 
         // generate pools
         val pools = PoolsMapper()
-        val generatedPoolAdder = GeneratedPoolAdder(existingCompanions, pools)
-        if (classes[poolableFqName]?.isNotEmpty() == true) {
-            generatedPoolAdder.addTo(classes[poolableFqName]!!)
+        val generatedDefaultPoolAdder = GeneratedDefaultPoolAdder(existingCompanions, pools)
+        if (classes[Poolable]?.isNotEmpty() == true) {
+            generatedDefaultPoolAdder.addTo(classes[Poolable]!!)
         }
 
         // find and transform calls to Entity methods inside system subclasses
-        if (classes[systemFqName]?.isNotEmpty() == true) {
+        if (classes[WorldAccessor]?.isNotEmpty() == true) {
 
             // methods to transform
             val transformMethods = listOf(
-                EntityWrapper.getComponentFun,
-                EntityWrapper.hasComponentFun,
-                EntityWrapper.removeComponentFun,
-                EntityWrapper.addComponentFun,
-                EntityWrapper.addPoolableComponentFun,
-                SingletonEntity.getComponentFun,
-                SingletonEntity.hasComponentFun,
-                SingletonEntity.removeComponentFun,
-                SingletonEntity.addComponentFun,
-                SingletonEntity.addPoolableComponentFun
+                WorldAccessor.Entity.getComponentFun,
+                WorldAccessor.Entity.hasComponentFun,
+                WorldAccessor.Entity.removeComponentFun,
+                WorldAccessor.Entity.addComponentFun,
+                WorldAccessor.Entity.addPoolableComponentFun,
+                WorldAccessor.getSingletonFun,
+                WorldAccessor.getSystemFun
+                //SingletonEntity.getComponentFun,
+                //SingletonEntity.hasComponentFun,
+                //SingletonEntity.removeComponentFun,
+                //SingletonEntity.addComponentFun,
+                //SingletonEntity.addPoolableComponentFun
             )
 
             // find
-            val entityWrapperMethodCallsData = callsFinder.find(
+            val callsData = callsFinder.find(
                 moduleFragment = moduleFragment,
                 representations = transformMethods,
-                inClasses = classes[systemFqName]!!
+                inClasses = classes[WorldAccessor]!!
             )
 
             // transform
-            val entityWrapperToComponentMapperCallsTransformer = EntityCallsToComponentMapperCallsTransformer(pools)
-            entityWrapperMethodCallsData.forEach { entityWrapperToComponentMapperCallsTransformer.transform(it) }
-        }
-
-        // find and transform calls to SingletonEntity methods inside SingletonEntity subclasses
-        if (classes[singletonEntityFqName]?.isNotEmpty() == true) {
-
-            // methods to transform
-            val singletonEntitiesTransformMethods = listOf(
-                SingletonEntity.getComponentFun,
-                SingletonEntity.hasComponentFun,
-                SingletonEntity.removeComponentFun,
-                SingletonEntity.addComponentFun,
-                SingletonEntity.addPoolableComponentFun
-            )
-
-            // find
-            val singletonEntitiesCallsData = callsFinder.find(
-                moduleFragment = moduleFragment,
-                representations = singletonEntitiesTransformMethods,
-                inClasses = classes[singletonEntityFqName]!!
-            )
-
-            // transform
-            val entityToComponentMapperCallsTransformer = EntityCallsToComponentMapperCallsTransformer(pools)
-            singletonEntitiesCallsData.forEach { entityToComponentMapperCallsTransformer.transform(it) }
+            val worldAccessorCallsTransformer = WorldAccessorCallsTransformer(pools)
+            callsData.forEach { worldAccessorCallsTransformer.transform(it) }
         }
 
         // find and transform fromPool() calls
@@ -151,26 +151,48 @@ class ExEcsIrPluginExtension() : IrGenerationExtension {
         }
 
 
-        val generatedTypeIdAdder = GeneratedTypeIdCompanionAndAccessFunctionAdder(existingCompanions)
+        val generatedTypeIdAdder = GeneratedTypeIdCompanionAndAccessFunctionAdder()
         // add companions that holds type ids to events
-        if (classes[eventFqName]?.isNotEmpty() == true) {
-            generatedTypeIdAdder.addTo(classes[eventFqName]!!, Event)
+        if (classes[Event]?.isNotEmpty() == true) {
+            generatedTypeIdAdder.addTo(classes[Event]!!, Event)
         }
         // add companions that holds type ids to components
-        if (classes[componentFqName]?.isNotEmpty() == true) {
-            generatedTypeIdAdder.addTo(classes[componentFqName]!!, Component)
+        if (classes[Component]?.isNotEmpty() == true) {
+            generatedTypeIdAdder.addTo(classes[Component]!!, Component)
         }
 
         // transform queueEvent
         val queueEventCalls =
-            callsFinder.find(moduleFragment, listOf(System.queuePoolableEventFun, World.queuePoolableEventFun))
+            callsFinder.find(moduleFragment, listOf(
+                WorldAccessor.queuePoolableEventFun,
+                WorldAccessor.queuePoolableEventWithApplyFun,
+                WorldAccessor.queuePoolableEventWithPriorityFun,
+                WorldAccessor.queuePoolableEventWithPriorityAndApplyFun,
+                World.queuePoolableEventFun,
+                World.queuePoolableEventWithApplyFun,
+                World.queuePoolableEventWithPriorityFun,
+                World.queuePoolableEventWithPriorityAndApplyFun
+            ))
         if (queueEventCalls.isNotEmpty()) {
             val queueEventTransformer = QueueEventTransformer(pools)
             queueEventCalls.forEach { queueEventTransformer.transform(it) }
         }
 
+        // singletonEntity methods transformer
+        val singletonEntityMethodsTransformer = SingletonEntityMethodsTransformer(existingTypeIdProperties, pools)
+        callsFinder.find(
+            moduleFragment,
+            listOf(
+                SingletonEntity.getComponentFun,
+                SingletonEntity.hasComponentFun,
+                SingletonEntity.removeComponentFun,
+                SingletonEntity.addPoolableComponentFun
+            )
+        ).forEach {
+            singletonEntityMethodsTransformer.transform(it)
+        }
 
         // debug
-        //moduleFragment.accept(DebugVisitor(), null)
+        moduleFragment.accept(DebugVisitor(), null)
     }
 }

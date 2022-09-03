@@ -185,7 +185,5 @@ object SingletonEntity : ClassDescriber() {
     }
 
 
-    val entityIdProperty by lazy {
-        MetaData.context.referenceProperties(FqName("$fqNameString.entityID")).single()
-    }
+    val entityIdProperty by lazy { PropertyDescriber("$fqNameString.entityID", this) }
 }

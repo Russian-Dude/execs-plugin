@@ -4,11 +4,11 @@ object ExEcsAnnotations {
 
     object ConstructorForDefaultPool : AnnotationDescriber("com.rdude.exECS.pool.ConstructorForDefaultPool")
 
-    object GeneratedComponentMapperProperty : AnnotationDescriber("com.rdude.exECS.plugin.GeneratedComponentMapperProperty")
+    object CachedComponentMapperProperty : AnnotationDescriber("com.rdude.exECS.plugin.CachedComponentMapperProperty")
 
-    object GeneratedSingletonEntityProperty : AnnotationDescriber("com.rdude.exECS.plugin.GeneratedSingletonEntityProperty")
+    object CachedSingletonEntityProperty : AnnotationDescriber("com.rdude.exECS.plugin.CachedSingletonEntityProperty")
 
-    object GeneratedSystemProperty : AnnotationDescriber("com.rdude.exECS.plugin.GeneratedSystemProperty")
+    object CachedSystemProperty : AnnotationDescriber("com.rdude.exECS.plugin.CachedSystemProperty")
 
     object GeneratedTypeIdProperty : AnnotationDescriber("com.rdude.exECS.plugin.GeneratedTypeIdProperty")
 

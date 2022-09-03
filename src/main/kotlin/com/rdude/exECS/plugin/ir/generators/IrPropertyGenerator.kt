@@ -1,6 +1,5 @@
 package com.rdude.exECS.plugin.ir.generators
 
-import com.rdude.exECS.plugin.ir.transform.PropertyTransformer
 import com.rdude.exECS.plugin.ir.utils.IR_FACTORY
 import com.rdude.exECS.plugin.ir.utils.MetaData
 import com.rdude.exECS.plugin.ir.utils.isSynthesized
@@ -16,7 +15,6 @@ import org.jetbrains.kotlin.ir.builders.declarations.buildValueParameter
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
 import org.jetbrains.kotlin.ir.declarations.IrProperty
-import org.jetbrains.kotlin.ir.declarations.addMember
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.expressions.IrExpressionBody
 import org.jetbrains.kotlin.ir.symbols.IrPropertySymbol
@@ -25,8 +23,6 @@ import org.jetbrains.kotlin.ir.util.properties
 import org.jetbrains.kotlin.name.Name
 
 object IrPropertyGenerator {
-
-    private val propertyTransformer = PropertyTransformer()
 
     /** @return generated property or existing property if exist and [forceOverride] is false.*/
     fun generatePropertyWithBackingField(
@@ -46,7 +42,7 @@ object IrPropertyGenerator {
         val existingProperty =
             inClass.properties.find { it.name.asString() == name }
 
-        if (existingProperty != null && !existingProperty.isSynthesized() && !existingProperty.isFakeOverride) {
+        if (existingProperty != null && !existingProperty.isSynthesized() && !existingProperty.isFakeOverride && !forceOverride) {
             return existingProperty
         }
 
@@ -143,13 +139,6 @@ object IrPropertyGenerator {
         property.parent = inClass
         property.backingField!!.parent = inClass
         property.getter!!.parent = inClass
-
-        if (existingProperty != null && (existingProperty.isFakeOverride || existingProperty.isSynthesized())) {
-            propertyTransformer.transformProperty(existingProperty, property, inClass)
-        }
-        else {
-            inClass.addMember(property)
-        }
 
         return property
     }

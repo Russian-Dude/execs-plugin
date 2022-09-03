@@ -1,29 +1,30 @@
 package com.rdude.exECS.plugin.synthetic
 
-import com.rdude.exECS.plugin.describer.ClassDescriber
-import com.rdude.exECS.plugin.describer.Component
-import com.rdude.exECS.plugin.describer.Event
-import com.rdude.exECS.plugin.describer.HasTypeId
-import com.rdude.exECS.plugin.ir.utils.merge
+import com.rdude.exECS.plugin.describer.*
 import org.jetbrains.kotlin.descriptors.*
+import org.jetbrains.kotlin.descriptors.annotations.AnnotationDescriptorImpl
 import org.jetbrains.kotlin.descriptors.annotations.Annotations
 import org.jetbrains.kotlin.descriptors.impl.FieldDescriptorImpl
 import org.jetbrains.kotlin.descriptors.impl.PropertyDescriptorImpl
 import org.jetbrains.kotlin.descriptors.impl.PropertyGetterDescriptorImpl
 import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.resolve.BindingContext
+import org.jetbrains.kotlin.resolve.constants.KClassValue
 import org.jetbrains.kotlin.resolve.descriptorUtil.builtIns
 import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
-import org.jetbrains.kotlin.resolve.descriptorUtil.getSuperInterfaces
+import org.jetbrains.kotlin.resolve.descriptorUtil.getAllSuperClassifiers
+import org.jetbrains.kotlin.resolve.descriptorUtil.module
+import org.jetbrains.kotlin.types.KotlinTypeFactory
 
 class SyntheticTypeIdPropertyGenerator : SyntheticGenerator() {
 
-    val generateIn = mutableMapOf<ClassDescriptor, MutableList<ClassDescriber>>()
+    val generatedNames = mutableMapOf<Name, ClassDescriber>()
 
     override fun isCompanionNeeded(thisDescriptor: ClassDescriptor): Boolean =
         thisDescriptor.modality != Modality.ABSTRACT
                 && thisDescriptor.kind != ClassKind.OBJECT
-                && thisDescriptor.getSuperInterfaces().any {
+                && thisDescriptor.kind != ClassKind.ENUM_ENTRY
+                && thisDescriptor.getAllSuperClassifiers().any {
             it.fqNameSafe.asString() == Component.fqNameString || it.fqNameSafe.asString() == Event.fqNameString
         }
 
@@ -38,16 +39,16 @@ class SyntheticTypeIdPropertyGenerator : SyntheticGenerator() {
             else if (thisDescriptor.kind == ClassKind.OBJECT) thisDescriptor
             else return emptyList()
 
-        if (cl.getSuperInterfaces().any { it.fqNameSafe.asString() == Component.fqNameString }) {
-            generateIn.merge(thisDescriptor, Component)
-            val typeName = cl.fqNameSafe.asString().replace(".", "_")
-            result.add(Name.identifier("execs_generated_component_type_id_property_for_$typeName"))
+        if (cl.getAllSuperClassifiers().any { it.fqNameSafe.asString() == Component.fqNameString }) {
+            val generatedName = Name.identifier(Component.typeIdPropertyNameFor(cl.fqNameSafe))
+            generatedNames[generatedName] = Component
+            result.add(generatedName)
         }
 
-        if (cl.getSuperInterfaces().any { it.fqNameSafe.asString() == Event.fqNameString }) {
-            generateIn.merge(thisDescriptor, Event)
-            val typeName = cl.fqNameSafe.asString().replace(".", "_")
-            result.add(Name.identifier("execs_generated_event_type_id_property_for_$typeName"))
+        if (cl.getAllSuperClassifiers().any { it.fqNameSafe.asString() == Event.fqNameString }) {
+            val generatedName = Name.identifier(Event.typeIdPropertyNameFor(cl.fqNameSafe))
+            generatedNames[generatedName] = Event
+            result.add(generatedName)
         }
 
         return result
@@ -61,71 +62,89 @@ class SyntheticTypeIdPropertyGenerator : SyntheticGenerator() {
         result: MutableSet<PropertyDescriptor>
     ) {
 
-        val describers = generateIn[thisDescriptor] ?: return
+        val describer = generatedNames[name] as? HasTypeId ?: return
 
-        describers.forEach { describer ->
-            describer as HasTypeId
-            val clName =
-                if (thisDescriptor.isCompanionObject) thisDescriptor.containingDeclaration.fqNameSafe.asString()
-                else thisDescriptor.fqNameSafe.asString()
-            val typeName = clName.replace(".", "_")
+        val cl =
+            if (thisDescriptor.isCompanionObject) thisDescriptor.containingDeclaration as ClassDescriptor
+            else thisDescriptor
 
-            val property = PropertyDescriptorImpl.create(
-                thisDescriptor,
-                Annotations.EMPTY,
-                Modality.FINAL,
-                DescriptorVisibilities.PUBLIC,
-                false,
-                Name.identifier("execs_generated_${describer.name.toLowerCase()}_type_id_property_for_$typeName"),
-                CallableMemberDescriptor.Kind.SYNTHESIZED,
-                thisDescriptor.source,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false
+        val generatedTypeIdAnnotationClassDescriptor =
+            thisDescriptor.module.findClassAcrossModuleDependencies(ExEcsAnnotations.GeneratedTypeIdProperty.classId)!!
+
+        val generatedTypeIdAnnotationType = KotlinTypeFactory.simpleNotNullType(
+            Annotations.EMPTY,
+            generatedTypeIdAnnotationClassDescriptor,
+            emptyList()
+        )
+
+        val describerCl = thisDescriptor.module.findClassAcrossModuleDependencies((describer as ClassDescriber).classId)!!
+
+        val typeIdPropertyAnnotations = Annotations.create(
+            listOf(
+                AnnotationDescriptorImpl(
+                    generatedTypeIdAnnotationType,
+                    mutableMapOf(
+                        Name.identifier("superType") to KClassValue.create(describerCl.defaultType),
+                        Name.identifier("type") to KClassValue.create(cl.defaultType)
+                    ),
+                    thisDescriptor.source
+                )
             )
+        )
 
-            property.setType(
-                thisDescriptor.builtIns.intType,
-                listOf(),
-                thisDescriptor.thisAsReceiverParameter,
-                null
-            )
+        val property = PropertyDescriptorImpl.create(
+            thisDescriptor,
+            typeIdPropertyAnnotations,
+            Modality.FINAL,
+            DescriptorVisibilities.PUBLIC,
+            false,
+            Name.identifier(describer.typeIdPropertyNameFor(cl.fqNameSafe)),
+            CallableMemberDescriptor.Kind.SYNTHESIZED,
+            thisDescriptor.source,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false
+        )
 
-            val getter = PropertyGetterDescriptorImpl(
-                property,
-                Annotations.EMPTY,
-                Modality.FINAL,
-                DescriptorVisibilities.PUBLIC,
-                false,
-                false,
-                false,
-                CallableMemberDescriptor.Kind.SYNTHESIZED,
-                null,
-                thisDescriptor.source
-            )
+        property.setType(
+            thisDescriptor.builtIns.intType,
+            listOf(),
+            thisDescriptor.thisAsReceiverParameter,
+            null
+        )
 
-            val field = FieldDescriptorImpl(
-                Annotations.EMPTY, property
-            )
+        val getter = PropertyGetterDescriptorImpl(
+            property,
+            Annotations.EMPTY,
+            Modality.FINAL,
+            DescriptorVisibilities.PUBLIC,
+            false,
+            false,
+            false,
+            CallableMemberDescriptor.Kind.SYNTHESIZED,
+            null,
+            thisDescriptor.source
+        )
 
-            getter.initialize(thisDescriptor.builtIns.intType)
+        val field = FieldDescriptorImpl(
+            Annotations.EMPTY, property
+        )
 
+        getter.initialize(thisDescriptor.builtIns.intType)
 
+        property.initialize(
+            getter,
+            null,
+            field,
+            null
+        )
 
-            property.initialize(
-                getter,
-                null,
-                field,
-                null
-            )
+        SynthesizedDeclarations.store(property)
 
-            SynthesizedDeclarations.store(property)
-
-            result.add(property)
-        }
+        result.add(property)
     }
 
 }

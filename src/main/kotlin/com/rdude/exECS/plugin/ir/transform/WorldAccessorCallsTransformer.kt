@@ -1,262 +1,319 @@
 package com.rdude.exECS.plugin.ir.transform
 
 import com.rdude.exECS.plugin.describer.*
-import com.rdude.exECS.plugin.ir.utils.MetaData
-import com.rdude.exECS.plugin.ir.utils.builderOf
-import com.rdude.exECS.plugin.ir.utils.createAndAddPropertyWithBackingField
-import com.rdude.exECS.plugin.ir.visit.CallsFinder
-import com.rdude.exECS.plugin.ir.visit.PoolsMapper
-import org.jetbrains.kotlin.backend.common.IrElementTransformerVoidWithContext
+import com.rdude.exECS.plugin.ir.utils.*
 import org.jetbrains.kotlin.backend.common.lower.DeclarationIrBuilder
 import org.jetbrains.kotlin.descriptors.Modality
 import org.jetbrains.kotlin.ir.builders.irCall
 import org.jetbrains.kotlin.ir.builders.irGet
 import org.jetbrains.kotlin.ir.builders.irGetObject
-import org.jetbrains.kotlin.ir.declarations.IrClass
-import org.jetbrains.kotlin.ir.declarations.IrProperty
+import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.expressions.IrClassReference
-import org.jetbrains.kotlin.ir.expressions.IrExpression
 import org.jetbrains.kotlin.ir.types.IrType
 import org.jetbrains.kotlin.ir.types.classFqName
 import org.jetbrains.kotlin.ir.types.getClass
+import org.jetbrains.kotlin.ir.types.isSubtypeOfClass
+import org.jetbrains.kotlin.ir.util.companionObject
+import org.jetbrains.kotlin.ir.util.hasAnnotation
+import org.jetbrains.kotlin.ir.util.kotlinFqName
+import org.jetbrains.kotlin.ir.util.properties
 
-class WorldAccessorCallsTransformer(val poolsMapper: PoolsMapper) : IrElementTransformerVoidWithContext() {
+class WorldAccessorCallsTransformer : IrTransformerElement() {
 
     private val addedProperties: MutableMap<IrClass, MutableMap<IrType, IrProperty>> = HashMap()
 
-    private lateinit var currentCallData: CallsFinder.CallData
-
-    fun transform(callData: CallsFinder.CallData) {
-        currentCallData = callData
-        callData.insideFunction.transform(this, null)
-    }
-
-    override fun visitCall(expression: IrCall): IrExpression {
-        val expression = super.visitCall(expression) as IrCall
-        if (expression != currentCallData.call) return expression
-        return when (currentCallData.methodDescriber) {
-            WorldAccessor.Entity.getComponentFun -> transformEntityGetComponent(expression)
-            WorldAccessor.Entity.hasComponentFun -> transformEntityHasComponent(expression)
-            WorldAccessor.Entity.removeComponentFun -> transformEntityRemoveComponent(expression)
-            WorldAccessor.Entity.addComponentFun -> transformEntityAddComponent(expression)
-            WorldAccessor.Entity.addPoolableComponentFun -> transformEntityAddPoolableComponent(expression)
-            WorldAccessor.getSingletonFun -> transformGetSingletonEntity(expression)
-            WorldAccessor.getSystemFun -> transformGetSystem(expression)
-            else -> throw NotImplementedError("Unknown ir call method describer ${currentCallData.methodDescriber}")
-        }
+    override fun visitCall(call: IrCall) {
+        if (call.isCallTo(WorldAccessor.Entity.getComponentFun)) transformEntityGetComponent(call)
+        else if (call.isCallTo(WorldAccessor.Entity.hasComponentFun)) transformEntityHasComponent(call)
+        else if (call.isCallTo(WorldAccessor.Entity.removeComponentFun)) transformEntityRemoveComponent(call)
+        else if (call.isCallTo(WorldAccessor.Entity.addComponentFun)) transformEntityAddComponent(call)
+        else if (call.isCallTo(WorldAccessor.Entity.addPoolableComponentFun)) transformEntityAddPoolableComponent(call)
+        else if (call.isCallTo(WorldAccessor.getSingletonFun)) transformGetSingletonEntity(call)
+        else if (call.isCallTo(WorldAccessor.getSystemFun)) transformGetSystem(call)
     }
 
 
-    private fun transformEntityGetComponent(expression: IrCall): IrExpression {
-        val componentType = expression.getTypeArgument(0)!!
+    private fun transformEntityGetComponent(expression: IrCall) {
 
-        if (componentType.getClass()?.modality == Modality.ABSTRACT) return expression
+        val currentWorldAccessorClass = getCurrentWorldAccessorClass(currentClass) ?: return
+        val currentWorldAccessorDispatchReceiver =
+            getCurrentWorldAccessorDispatchReceiverValue(currentWorldAccessorClass, currentFunction)
 
-        val componentMapperProperty = addComponentMapperPropertyIfNeeded(currentCallData.insideClass, componentType)
+        acceptLazy {
 
-        val builder = DeclarationIrBuilder(MetaData.context, componentMapperProperty.symbol)
+            val componentType = expression.getTypeArgument(0)!!
 
-        val getComponentMapperCall = builder.irCall(componentMapperProperty.getter!!)
-            .apply {
-                dispatchReceiver = builder.irGet(currentCallData.insideClassFunction.dispatchReceiverParameter!!)
-            }
+            if (componentType.getClass()?.modality == Modality.ABSTRACT) return@acceptLazy
 
-        val getEntityIdCall = builder.irCall(Entity.entityIdProperty.owner.getter!!)
-            .apply {
-                dispatchReceiver = expression.extensionReceiver!!
-            }
+            val componentMapperProperty = addComponentMapperPropertyIfNeeded(currentWorldAccessorClass, componentType)
 
-        return builder.irCall(ComponentMapper.getComponentFun.single())
-            .apply {
-                dispatchReceiver = getComponentMapperCall
-                type = expression.type
-                putValueArgument(0, getEntityIdCall)
-            }
-    }
+            val builder = DeclarationIrBuilder(MetaData.context, componentMapperProperty.symbol)
 
-
-    private fun transformEntityHasComponent(expression: IrCall): IrExpression {
-        val componentType =
-            if (expression.typeArgumentsCount == 1) expression.getTypeArgument(0)!!
-            else (expression.getValueArgument(0)!! as IrClassReference).classType
-
-        if (componentType.getClass()?.modality == Modality.ABSTRACT) return expression
-
-        val componentMapperProperty = addComponentMapperPropertyIfNeeded(currentCallData.insideClass, componentType)
-
-        val builder = DeclarationIrBuilder(MetaData.context, currentCallData.insideClass.symbol)
-
-        val getComponentMapperCall = builder.irCall(componentMapperProperty.getter!!)
-            .apply {
-                dispatchReceiver = builder.irGet(currentCallData.insideClassFunction.dispatchReceiverParameter!!)
-            }
-
-        val getEntityIdCall = builder.irCall(Entity.entityIdProperty.owner.getter!!)
-            .apply {
-                dispatchReceiver = expression.extensionReceiver!!
-            }
-
-        return builder.irCall(ComponentMapper.hasComponentFun.single())
-            .apply {
-                dispatchReceiver = getComponentMapperCall
-                putValueArgument(0, getEntityIdCall)
-                type = expression.type
-            }
-    }
-
-
-    private fun transformEntityRemoveComponent(expression: IrCall): IrExpression {
-        val componentType =
-            if (expression.typeArgumentsCount == 1) expression.getTypeArgument(0)!!
-            else (expression.getValueArgument(0)!! as IrClassReference).classType
-
-        if (componentType.getClass()?.modality == Modality.ABSTRACT) return expression
-
-        val componentMapperProperty = addComponentMapperPropertyIfNeeded(currentCallData.insideClass, componentType)
-
-        val builder = DeclarationIrBuilder(MetaData.context, currentCallData.insideClass.symbol)
-
-        val getComponentMapperCall = builder.irCall(componentMapperProperty.getter!!)
-            .apply {
-                dispatchReceiver = builder.irGet(currentCallData.insideClassFunction.dispatchReceiverParameter!!)
-            }
-
-        val getEntityIdCall = builder.irCall(Entity.entityIdProperty.owner.getter!!)
-            .apply {
-                dispatchReceiver = expression.extensionReceiver!!
-            }
-
-        return builder.irCall(ComponentMapper.removeComponentFun.single())
-            .apply {
-                dispatchReceiver = getComponentMapperCall
-                putValueArgument(0, getEntityIdCall)
-                type = expression.type
-            }
-    }
-
-
-    private fun transformEntityAddComponent(expression: IrCall): IrExpression {
-        val componentType = expression.getValueArgument(0)!!.type
-
-        val componentMapperProperty = addComponentMapperPropertyIfNeeded(currentCallData.insideClass, componentType)
-
-        val builder = builderOf(currentCallData.insideClass)
-
-        val getComponentMapperCall = builder.irCall(componentMapperProperty.getter!!)
-            .apply {
-                dispatchReceiver = builder.irGet(currentCallData.insideClassFunction.dispatchReceiverParameter!!)
-            }
-
-        val getEntityIdCall = builder.irCall(Entity.entityIdProperty.owner.getter!!)
-            .apply {
-                dispatchReceiver = expression.extensionReceiver!!
-            }
-
-        return builder.irCall(ComponentMapper.addComponentFun.single())
-            .apply {
-                dispatchReceiver = getComponentMapperCall
-                putValueArgument(0, getEntityIdCall)
-                putValueArgument(1, expression.getValueArgument(0))
-                type = expression.type
-            }
-    }
-
-
-    private fun transformEntityAddPoolableComponent(expression: IrCall): IrExpression {
-        val applyFunction =
-            if (expression.valueArgumentsCount == 1) expression.getValueArgument(0)!!
-            else null
-
-        val componentType = expression.getTypeArgument(0)!!
-
-        if (componentType.getClass()?.modality == Modality.ABSTRACT) return expression
-
-        val componentMapperProperty = addComponentMapperPropertyIfNeeded(currentCallData.insideClass, componentType)
-
-        val builder = builderOf(currentCallData.insideClass)
-
-        val getComponentMapperCall = builder.irCall(componentMapperProperty.getter!!)
-            .apply {
-                dispatchReceiver = builder.irGet(currentCallData.insideClassFunction.dispatchReceiverParameter!!)
-            }
-
-        val getEntityIdCall = builder.irCall(Entity.entityIdProperty.owner.getter!!)
-            .apply {
-                dispatchReceiver = expression.extensionReceiver!!
-            }
-
-        val poolPropertyInfo = poolsMapper[componentType] ?: return expression
-
-        val poolBuilder = builderOf(poolPropertyInfo.property)
-
-        val getPoolCall = builder.irCall(poolPropertyInfo.property.getter!!)
-            .apply {
-                dispatchReceiver = poolBuilder.irGetObject(poolPropertyInfo.companion.symbol)
-                type = Pool.irTypeWith(componentType)
-            }
-
-        val obtainComponentCall = poolBuilder.irCall(Pool.obtainFun.single())
-            .apply {
-                dispatchReceiver = getPoolCall
-                type = componentType
-            }
-
-        val resultCall = builder.irCall(ComponentMapper.addComponentFun.single())
-            .apply {
-                type = expression.type
-                dispatchReceiver = getComponentMapperCall
-                putValueArgument(0, getEntityIdCall)
-            }
-
-        if (applyFunction == null) {
-            resultCall.putValueArgument(1, obtainComponentCall)
-        }
-        else {
-            val applyCall = builder.irCall(Kotlin.applyFun.single())
+            val getComponentMapperCall = builder.irCall(componentMapperProperty.getter!!)
                 .apply {
-                    extensionReceiver = obtainComponentCall
-                    putValueArgument(0, applyFunction)
-                    putTypeArgument(0, componentType)
+                    dispatchReceiver = builder.irGet(currentWorldAccessorDispatchReceiver)
                 }
-            resultCall.putValueArgument(1, applyCall)
+
+            val getEntityIdCall = builder.irCall(Entity.entityIdProperty.irProperty.getter!!)
+                .apply {
+                    dispatchReceiver = expression.extensionReceiver!!
+                }
+
+            val resultCall = builder.irCall(ComponentMapper.getComponentFun.single())
+                .apply {
+                    dispatchReceiver = getComponentMapperCall
+                    type = expression.type
+                    putValueArgument(0, getEntityIdCall)
+                }
+
+            transformLazy(expression, resultCall)
         }
-
-        return resultCall
     }
 
-    private fun transformGetSingletonEntity(expression: IrCall): IrExpression {
-        val singletonType = expression.getTypeArgument(0)!!
 
-        if (singletonType.getClass()?.modality == Modality.ABSTRACT) return expression
+    private fun transformEntityHasComponent(expression: IrCall) {
 
-        val cachedSingletonProperty = addSingletonEntityPropertyIfNeeded(currentCallData.insideClass, singletonType)
+        val currentWorldAccessorClass = getCurrentWorldAccessorClass(currentClass) ?: return
+        val currentWorldAccessorDispatchReceiver =
+            getCurrentWorldAccessorDispatchReceiverValue(currentWorldAccessorClass, currentFunction)
 
-        val builder = builderOf(currentCallData.insideClass)
+        acceptLazy {
 
-        return builder.irCall(cachedSingletonProperty.getter!!)
-            .apply {
-                type = expression.type
-                dispatchReceiver = builder.irGet(currentCallData.insideClassFunction.dispatchReceiverParameter!!)
+            val componentType =
+                if (expression.typeArgumentsCount == 1) expression.getTypeArgument(0)!!
+                else (expression.getValueArgument(0)!! as IrClassReference).classType
+
+            if (componentType.getClass()?.modality == Modality.ABSTRACT) return@acceptLazy
+
+
+            val componentMapperProperty = addComponentMapperPropertyIfNeeded(currentWorldAccessorClass, componentType)
+
+            val builder = DeclarationIrBuilder(MetaData.context, componentMapperProperty.symbol)
+
+            val getComponentMapperCall = builder.irCall(componentMapperProperty.getter!!)
+                .apply {
+                    dispatchReceiver = builder.irGet(currentWorldAccessorDispatchReceiver)
+                }
+
+            val getEntityIdCall = builder.irCall(Entity.entityIdProperty.irProperty.getter!!)
+                .apply {
+                    dispatchReceiver = expression.extensionReceiver!!
+                }
+
+            val resultCall = builder.irCall(ComponentMapper.hasComponentFun.single())
+                .apply {
+                    dispatchReceiver = getComponentMapperCall
+                    putValueArgument(0, getEntityIdCall)
+                    type = expression.type
+                }
+
+            transformLazy(expression, resultCall)
+        }
+    }
+
+
+    private fun transformEntityRemoveComponent(expression: IrCall) {
+
+        val currentWorldAccessorClass = getCurrentWorldAccessorClass(currentClass) ?: return
+        val currentWorldAccessorDispatchReceiver =
+            getCurrentWorldAccessorDispatchReceiverValue(currentWorldAccessorClass, currentFunction)
+
+        acceptLazy {
+
+            val componentType =
+                if (expression.typeArgumentsCount == 1) expression.getTypeArgument(0)!!
+                else (expression.getValueArgument(0)!! as IrClassReference).classType
+
+            if (componentType.getClass()?.modality == Modality.ABSTRACT) return@acceptLazy
+
+            val componentMapperProperty = addComponentMapperPropertyIfNeeded(currentWorldAccessorClass, componentType)
+
+            val builder = DeclarationIrBuilder(MetaData.context, componentMapperProperty.symbol)
+
+            val getComponentMapperCall = builder.irCall(componentMapperProperty.getter!!)
+                .apply {
+                    dispatchReceiver = builder.irGet(currentWorldAccessorDispatchReceiver)
+                }
+
+            val getEntityIdCall = builder.irCall(Entity.entityIdProperty.irProperty.getter!!)
+                .apply {
+                    dispatchReceiver = expression.extensionReceiver!!
+                }
+
+            val resultCall = builder.irCall(ComponentMapper.removeComponentFun.single())
+                .apply {
+                    dispatchReceiver = getComponentMapperCall
+                    putValueArgument(0, getEntityIdCall)
+                    type = expression.type
+                }
+
+            transformLazy(expression, resultCall)
+        }
+    }
+
+
+    private fun transformEntityAddComponent(expression: IrCall) {
+
+        val currentWorldAccessorClass = getCurrentWorldAccessorClass(currentClass) ?: return
+        val currentWorldAccessorDispatchReceiver =
+            getCurrentWorldAccessorDispatchReceiverValue(currentWorldAccessorClass, currentFunction)
+
+        acceptLazy {
+
+            val componentType = expression.getValueArgument(0)!!.type
+
+            val componentMapperProperty = addComponentMapperPropertyIfNeeded(currentWorldAccessorClass, componentType)
+
+            val builder = builderOf(componentMapperProperty)
+
+            val getComponentMapperCall = builder.irCall(componentMapperProperty.getter!!)
+                .apply {
+                    dispatchReceiver = builder.irGet(currentWorldAccessorDispatchReceiver)
+                }
+
+            val getEntityIdCall = builder.irCall(Entity.entityIdProperty.irProperty.getter!!)
+                .apply {
+                    dispatchReceiver = expression.extensionReceiver!!
+                }
+
+            val resultCall = builder.irCall(ComponentMapper.addComponentFun.single())
+                .apply {
+                    dispatchReceiver = getComponentMapperCall
+                    putValueArgument(0, getEntityIdCall)
+                    putValueArgument(1, expression.getValueArgument(0))
+                    type = expression.type
+                }
+
+            transformLazy(expression, resultCall)
+        }
+    }
+
+
+    private fun transformEntityAddPoolableComponent(expression: IrCall) {
+
+        val currentWorldAccessorClass = getCurrentWorldAccessorClass(currentClass) ?: return
+        val currentWorldAccessorDispatchReceiver =
+            getCurrentWorldAccessorDispatchReceiverValue(currentWorldAccessorClass, currentFunction)
+
+        acceptLazy {
+
+            val applyFunction =
+                if (expression.valueArgumentsCount == 1) expression.getValueArgument(0)!!
+                else null
+
+            val componentType = expression.getTypeArgument(0)!!
+            val componentClass = componentType.getClass()!!
+            val componentCompanionClass = componentClass.companionObject() ?: return@acceptLazy
+            val poolProperty = componentCompanionClass.properties
+                .find { it.hasAnnotation(ExEcsAnnotations.GeneratedDefaultPoolProperty.symbol) }
+                ?: return@acceptLazy
+
+            if (componentType.getClass()?.modality == Modality.ABSTRACT) return@acceptLazy
+
+            val componentMapperProperty = addComponentMapperPropertyIfNeeded(currentWorldAccessorClass, componentType)
+
+            val builder = builderOf(componentMapperProperty)
+
+            val getComponentMapperCall = builder.irCall(componentMapperProperty.getter!!)
+                .apply {
+                    dispatchReceiver = builder.irGet(currentWorldAccessorDispatchReceiver)
+                }
+
+            val getEntityIdCall = builder.irCall(Entity.entityIdProperty.irProperty.getter!!)
+                .apply {
+                    dispatchReceiver = expression.extensionReceiver!!
+                }
+
+            val poolBuilder = builderOf(poolProperty)
+
+            val getPoolCall = poolBuilder.irCall(poolProperty.getter!!)
+                .apply {
+                    dispatchReceiver = poolBuilder.irGetObject(componentCompanionClass.symbol)
+                    type = Pool.irTypeWith(componentType)
+                }
+
+            val obtainComponentCall = poolBuilder.irCall(Pool.obtainFun.single())
+                .apply {
+                    dispatchReceiver = getPoolCall
+                    type = componentType
+                }
+
+            val resultCall = builder.irCall(ComponentMapper.addComponentFun.single())
+                .apply {
+                    type = expression.type
+                    dispatchReceiver = getComponentMapperCall
+                    putValueArgument(0, getEntityIdCall)
+                }
+
+            if (applyFunction == null) {
+                resultCall.putValueArgument(1, obtainComponentCall)
             }
-    }
-
-    private fun transformGetSystem(expression: IrCall): IrExpression {
-        val systemType = expression.getTypeArgument(0)!!
-
-        if (systemType.getClass()?.modality == Modality.ABSTRACT) return expression
-
-        val cachedSystemProperty = addSystemPropertyIfNeeded(currentCallData.insideClass, systemType)
-
-        val builder = builderOf(currentCallData.insideClass)
-
-        return builder.irCall(cachedSystemProperty.getter!!)
-            .apply {
-                type = expression.type
-                dispatchReceiver = builder.irGet(currentCallData.insideClassFunction.dispatchReceiverParameter!!)
+            else {
+                val applyCall = builder.irCall(Kotlin.applyFun.single())
+                    .apply {
+                        extensionReceiver = obtainComponentCall
+                        putValueArgument(0, applyFunction)
+                        putTypeArgument(0, componentType)
+                    }
+                resultCall.putValueArgument(1, applyCall)
             }
+
+            transformLazy(expression, resultCall)
+        }
     }
 
+    private fun transformGetSingletonEntity(expression: IrCall) {
+
+        val currentWorldAccessorClass = getCurrentWorldAccessorClass(currentClass) ?: return
+        val currentWorldAccessorDispatchReceiver =
+            getCurrentWorldAccessorDispatchReceiverValue(currentWorldAccessorClass, currentFunction)
+
+        acceptLazy {
+
+            val singletonType = expression.getTypeArgument(0)!!
+
+            if (singletonType.getClass()?.modality == Modality.ABSTRACT) return@acceptLazy
+
+            val cachedSingletonProperty = addSingletonEntityPropertyIfNeeded(currentWorldAccessorClass, singletonType)
+
+            val builder = builderOf(currentWorldAccessorClass)
+
+            val resultCall = builder.irCall(cachedSingletonProperty.getter!!)
+                .apply {
+                    type = expression.type
+                    dispatchReceiver = builder.irGet(currentWorldAccessorDispatchReceiver)
+                }
+
+            transformLazy(expression, resultCall)
+        }
+    }
+
+    private fun transformGetSystem(expression: IrCall) {
+
+        val currentWorldAccessorClass = getCurrentWorldAccessorClass(currentClass) ?: return
+        val currentWorldAccessorDispatchReceiver =
+            getCurrentWorldAccessorDispatchReceiverValue(currentWorldAccessorClass, currentFunction)
+
+        acceptLazy {
+
+            val systemType = expression.getTypeArgument(0)!!
+
+            if (systemType.getClass()?.modality == Modality.ABSTRACT) return@acceptLazy
+
+            val cachedSystemProperty = addSystemPropertyIfNeeded(currentWorldAccessorClass, systemType)
+
+            val builder = builderOf(currentWorldAccessorClass)
+
+            val resultCall = builder.irCall(cachedSystemProperty.getter!!)
+                .apply {
+                    type = expression.type
+                    dispatchReceiver = builder.irGet(currentWorldAccessorDispatchReceiver)
+                }
+
+            transformLazy(expression, resultCall)
+        }
+    }
 
 
     private fun addComponentMapperPropertyIfNeeded(irClass: IrClass, irType: IrType): IrProperty {
@@ -266,14 +323,14 @@ class WorldAccessorCallsTransformer(val poolsMapper: PoolsMapper) : IrElementTra
         val typeArgumentString = irType.classFqName!!.asString().replace(".", "_")
 
         val resultProperty = irClass.createAndAddPropertyWithBackingField(
-            name = "generated_component_mapper_for_$typeArgumentString",
+            name = "cached_component_mapper_for_$typeArgumentString",
             type = ComponentMapper.irTypeWith(irType),
             isVar = true,
             isLateInit = false,
             annotations = listOf(
                 Kotlin.JvmFieldAnnotation.constructorCall(),
                 Kotlin.TransientAnnotation.constructorCall(),
-                ExEcsAnnotations.GeneratedComponentMapperProperty.constructorCall(irType)
+                ExEcsAnnotations.CachedComponentMapperProperty.constructorCall(irType)
             )
         )
 
@@ -290,14 +347,14 @@ class WorldAccessorCallsTransformer(val poolsMapper: PoolsMapper) : IrElementTra
         val typeArgumentString = irType.classFqName!!.asString().replace(".", "_")
 
         val resultProperty = irClass.createAndAddPropertyWithBackingField(
-            name = "generated_singleton_entity_property_for_$typeArgumentString",
+            name = "cached_singleton_$typeArgumentString",
             type = irType,
             isVar = true,
             isLateInit = false,
             annotations = listOf(
                 Kotlin.JvmFieldAnnotation.constructorCall(),
                 Kotlin.TransientAnnotation.constructorCall(),
-                ExEcsAnnotations.GeneratedSingletonEntityProperty.constructorCall(irType)
+                ExEcsAnnotations.CachedSingletonEntityProperty.constructorCall(irType)
             )
         )
 
@@ -314,14 +371,14 @@ class WorldAccessorCallsTransformer(val poolsMapper: PoolsMapper) : IrElementTra
         val typeArgumentString = irType.classFqName!!.asString().replace(".", "_")
 
         val resultProperty = irClass.createAndAddPropertyWithBackingField(
-            name = "generated_system_property_for_$typeArgumentString",
+            name = "cached_system_$typeArgumentString",
             type = irType,
             isVar = true,
             isLateInit = false,
             annotations = listOf(
                 Kotlin.JvmFieldAnnotation.constructorCall(),
                 Kotlin.TransientAnnotation.constructorCall(),
-                ExEcsAnnotations.GeneratedSystemProperty.constructorCall(irType)
+                ExEcsAnnotations.CachedSystemProperty.constructorCall(irType)
             )
         )
 
@@ -329,4 +386,37 @@ class WorldAccessorCallsTransformer(val poolsMapper: PoolsMapper) : IrElementTra
         addedProperties[irClass]!![irType] = resultProperty
         return resultProperty
     }
+
+
+    private fun getCurrentWorldAccessorClass(startLookFrom: IrClass?): IrClass? {
+        if (startLookFrom == null) return null
+        else if (startLookFrom.isSubclassOf(WorldAccessor)) return startLookFrom
+        val parent = startLookFrom.parent as? IrClass ?: return null
+        if (parent.isInner) return getCurrentWorldAccessorClass(parent)
+        return null
+    }
+
+
+    private fun getCurrentWorldAccessorDispatchReceiverValue(
+        fromClass: IrClass,
+        currentFun: IrFunction?
+    ): IrValueParameter {
+        return if (currentFun != null) {
+            var dispatchReceiver = currentFun.dispatchReceiverParameter
+            var parent: IrDeclarationParent? = currentFun.parent
+            while (dispatchReceiver?.type?.getClass() != fromClass && parent != null) {
+                dispatchReceiver = when (parent) {
+                    is IrFunction -> parent.dispatchReceiverParameter
+                    is IrClass -> parent.thisReceiver
+                    else -> null
+                }
+                parent = (parent as? IrDeclaration)?.parent
+            }
+            if (dispatchReceiver?.type?.isSubtypeOfClass(WorldAccessor.symbol) == true) dispatchReceiver
+            else {
+                throw IllegalStateException("exEcs plugin can not find dispatch receiver parameter for ${fromClass.kotlinFqName.asString()}")
+            }
+        } else fromClass.thisReceiver!!
+    }
+
 }

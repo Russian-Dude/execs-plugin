@@ -15,6 +15,7 @@ import org.jetbrains.kotlin.ir.builders.declarations.buildValueParameter
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrDeclarationOrigin
 import org.jetbrains.kotlin.ir.declarations.IrProperty
+import org.jetbrains.kotlin.ir.declarations.addMember
 import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.expressions.IrExpressionBody
 import org.jetbrains.kotlin.ir.expressions.impl.IrDelegatingConstructorCallImpl
@@ -27,8 +28,7 @@ import org.jetbrains.kotlin.ir.util.constructors
 import org.jetbrains.kotlin.ir.util.defaultType
 import org.jetbrains.kotlin.name.Name
 
-
-fun IrClass.createAndAddPropertyWithBackingField(
+fun IrClass.createPropertyWithBackingField(
     name: String,
     type: IrType,
     isVar: Boolean = true,
@@ -52,6 +52,23 @@ fun IrClass.createAndAddPropertyWithBackingField(
         overridden,
         initializer
     )
+}
+
+fun IrClass.createAndAddPropertyWithBackingField(
+    name: String,
+    type: IrType,
+    isVar: Boolean = true,
+    isFinal: Boolean = false,
+    isLateInit: Boolean = false,
+    visibility: DescriptorVisibility = DescriptorVisibilities.PUBLIC,
+    annotations: List<IrConstructorCall> = listOf(),
+    overridden: List<IrPropertySymbol>? = null,
+    initializer: IrExpressionBody? = null
+): IrProperty {
+
+    return createPropertyWithBackingField(
+        name, type, isVar, isFinal, isLateInit, visibility, annotations, overridden, initializer
+    ).apply { this@createAndAddPropertyWithBackingField.addMember(this) }
 }
 
 

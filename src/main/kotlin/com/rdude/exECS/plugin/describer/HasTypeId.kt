@@ -14,6 +14,8 @@ interface HasTypeId {
 
     val name: String
 
+    val getTypeIdMethodName get() = "get${name.capitalize()}TypeId"
+
     fun getTypeIdPropertyNamePrefix(): String
 
     fun typeIdPropertyNameFor(typeFqName: FqName): String =

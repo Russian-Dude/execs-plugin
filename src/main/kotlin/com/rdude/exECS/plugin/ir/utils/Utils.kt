@@ -1,12 +1,14 @@
 package com.rdude.exECS.plugin.ir.utils
 
+import com.rdude.exECS.plugin.describer.ClassDescriber
 import com.rdude.exECS.plugin.describer.MethodDescriber
+import com.rdude.exECS.plugin.describer.PropertyDescriber
+import com.rdude.exECS.plugin.ir.transform.IrTransformer
+import com.rdude.exECS.plugin.ir.transform.IrTransformerElement
 import com.rdude.exECS.plugin.synthetic.SynthesizedDeclarations
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.backend.common.lower.DeclarationIrBuilder
-import org.jetbrains.kotlin.ir.declarations.IrDeclaration
-import org.jetbrains.kotlin.ir.declarations.IrFunction
-import org.jetbrains.kotlin.ir.declarations.IrProperty
+import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.IrCall
 import org.jetbrains.kotlin.ir.symbols.IrSimpleFunctionSymbol
 import org.jetbrains.kotlin.ir.util.overrides
@@ -21,7 +23,17 @@ val IR_FACTORY by lazy { MetaData.context.irFactory }
 fun IrCall.isCallTo(method: MethodDescriber): Boolean =
     method.symbols.any { symbol.owner == it.owner || symbol.owner.overrides(it.owner) }
 
+fun IrClass.isSubclassOf(classDescriber: ClassDescriber) = classDescriber.isSuperFor(this)
+
+fun IrProperty.isOverride(propertyDescriber: PropertyDescriber) = propertyDescriber.isSuperFor(this)
+
 fun IrSimpleFunctionSymbol.toMethodDescriber() = MethodDescriber(listOf(this))
+
+fun IrModuleFragment.transformUsing(vararg transformerElements: IrTransformerElement) {
+    val transformer = IrTransformer()
+    transformer.register(*transformerElements)
+    transformer.transform(this)
+}
 
 fun List<IrSimpleFunctionSymbol>.toMethodDescriber() = MethodDescriber(this)
 

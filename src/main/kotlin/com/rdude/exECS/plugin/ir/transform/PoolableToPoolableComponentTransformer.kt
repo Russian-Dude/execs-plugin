@@ -7,16 +7,15 @@ import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.types.isSubtypeOfClass
 import org.jetbrains.kotlin.ir.util.defaultType
 
-class PoolableToPoolableComponentTransformer {
+class PoolableToPoolableComponentTransformer : IrTransformerElement() {
 
-    fun transformIfNeeded(irClass: IrClass): Boolean {
-        return if (irClass.defaultType.isSubtypeOfClass(Component.symbol)
-            && irClass.defaultType.isSubtypeOfClass(Poolable.symbol)
-            && !irClass.defaultType.isSubtypeOfClass(PoolableComponent.symbol)
+    override fun visitClass(cl: IrClass) {
+        if (cl.defaultType.isSubtypeOfClass(Component.symbol)
+            && cl.defaultType.isSubtypeOfClass(Poolable.symbol)
+            && !cl.defaultType.isSubtypeOfClass(PoolableComponent.symbol)
         ) {
-            (irClass.superTypes as MutableList).add(PoolableComponent.irType)
-            true
-        } else false
+            (cl.superTypes as MutableList).add(PoolableComponent.irType)
+        }
     }
 
 }

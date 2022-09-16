@@ -16,6 +16,7 @@ import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 import org.jetbrains.kotlin.resolve.descriptorUtil.getAllSuperClassifiers
 import org.jetbrains.kotlin.resolve.descriptorUtil.module
 import org.jetbrains.kotlin.types.KotlinTypeFactory
+import org.jetbrains.kotlin.types.TypeAttributes
 import org.jetbrains.kotlin.types.TypeProjectionImpl
 import org.jetbrains.kotlin.types.typeUtil.isEnum
 
@@ -61,7 +62,7 @@ class SyntheticDefaultPoolPropertyGenerator : SyntheticGenerator() {
         val poolClassDescriptor = thisDescriptor.module.findClassAcrossModuleDependencies(Pool.classId)!!
 
         val propertyPoolType = KotlinTypeFactory.simpleNotNullType(
-            Annotations.EMPTY,
+            TypeAttributes.Empty,
             poolClassDescriptor,
             listOf(TypeProjectionImpl(containingDeclaration.defaultType))
         )
@@ -70,7 +71,7 @@ class SyntheticDefaultPoolPropertyGenerator : SyntheticGenerator() {
             thisDescriptor.module.findClassAcrossModuleDependencies(ExEcsAnnotations.GeneratedDefaultPoolProperty.classId)!!
 
         val generatedDefaultPoolAnnotationType = KotlinTypeFactory.simpleNotNullType(
-            Annotations.EMPTY,
+            TypeAttributes.Empty,
             generatedDefaultPoolAnnotationClassDescriptor,
             emptyList()
         )

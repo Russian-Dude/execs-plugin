@@ -226,21 +226,6 @@ class CustomDumperVisitor : IrElementVisitor<Unit, CustomDumperVisitor.Entry?> {
         super.visitComposite(expression, data)
     }
 
-    override fun <T> visitConst(expression: IrConst<T>, data: Entry?) {
-        val info = "Const"
-        if (last?.element == expression) {
-            last?.mainInfo += " $info"
-            super.visitConst(expression, data)
-            return
-        }
-        val entry = Entry(expression)
-        last = entry
-        entry.parent = data
-        data?.let { it.children += entry }
-        entry.mainInfo = info
-        super.visitConst(expression, data)
-    }
-
     override fun visitConstructor(declaration: IrConstructor, data: Entry?) {
         val info = "Constructor"
         if (last?.element == declaration) {

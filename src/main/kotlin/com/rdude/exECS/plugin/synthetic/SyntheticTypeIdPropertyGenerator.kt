@@ -15,6 +15,7 @@ import org.jetbrains.kotlin.resolve.descriptorUtil.fqNameSafe
 import org.jetbrains.kotlin.resolve.descriptorUtil.getAllSuperClassifiers
 import org.jetbrains.kotlin.resolve.descriptorUtil.module
 import org.jetbrains.kotlin.types.KotlinTypeFactory
+import org.jetbrains.kotlin.types.TypeAttributes
 
 class SyntheticTypeIdPropertyGenerator : SyntheticGenerator() {
 
@@ -72,7 +73,7 @@ class SyntheticTypeIdPropertyGenerator : SyntheticGenerator() {
             thisDescriptor.module.findClassAcrossModuleDependencies(ExEcsAnnotations.GeneratedTypeIdProperty.classId)!!
 
         val generatedTypeIdAnnotationType = KotlinTypeFactory.simpleNotNullType(
-            Annotations.EMPTY,
+            TypeAttributes.Empty,
             generatedTypeIdAnnotationClassDescriptor,
             emptyList()
         )

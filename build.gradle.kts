@@ -1,7 +1,7 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    kotlin("jvm") version "1.6.21"
+    kotlin("jvm") version "1.7.10"
     id("maven-publish")
     `java-gradle-plugin`
 }
@@ -16,9 +16,9 @@ repositories {
 dependencies {
     implementation("org.junit.jupiter:junit-jupiter:5.7.0")
     testImplementation(kotlin("test"))
-    compileOnly("org.jetbrains.kotlin:kotlin-stdlib:1.6.21")
-    implementation("org.jetbrains.kotlin:kotlin-gradle-plugin:1.6.21")
-    compileOnly("org.jetbrains.kotlin:kotlin-compiler-embeddable:1.6.21")
+    compileOnly("org.jetbrains.kotlin:kotlin-stdlib:1.7.10")
+    implementation("org.jetbrains.kotlin:kotlin-gradle-plugin:1.7.10")
+    compileOnly("org.jetbrains.kotlin:kotlin-compiler-embeddable:1.7.10")
 }
 
 tasks.test {

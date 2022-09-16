@@ -32,6 +32,8 @@ class ExEcsIrPluginExtension : IrGenerationExtension {
             WorldAccessorCallsTransformer(),
             QueuePoolableEventTransformer(),
             SingletonEntityMethodsTransformer(),
+            EntityBlueprintWithPoolableConfigInvokeTransformer(),
+            EntityBuilderWithPoolableComponentFunTransformer(),
             DebugPrinter()
         )
     }

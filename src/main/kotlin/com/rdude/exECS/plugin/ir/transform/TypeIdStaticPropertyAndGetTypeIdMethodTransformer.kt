@@ -2,7 +2,6 @@ package com.rdude.exECS.plugin.ir.transform
 
 import com.rdude.exECS.plugin.describer.*
 import com.rdude.exECS.plugin.ir.utils.*
-import org.jetbrains.kotlin.backend.common.ir.copyTo
 import org.jetbrains.kotlin.backend.common.lower.DeclarationIrBuilder
 import org.jetbrains.kotlin.descriptors.DescriptorVisibilities
 import org.jetbrains.kotlin.descriptors.Modality
